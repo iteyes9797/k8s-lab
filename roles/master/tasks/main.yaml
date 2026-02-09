@@ -1,0 +1,131 @@
+---
+# 0) admin.conf 존재 여부 확인 → 이미 init 된 마스터는 init 스킵 (master01만 검사)
+- name: Master - admin.conf 존재 여부 확인 (master01 only)
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: master_admin_conf
+  when: inventory_hostname == groups['masters'][0]
+
+# 1) Kubernetes Repo 설정 (모든 마스터 공통)
+- name: Master - Kubernetes repo 설정
+  ansible.builtin.yum_repository:
+    name: "kubernetes"
+    description: "Kubernetes Repo"
+    baseurl: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key"
+  become: true
+
+# 2) kubeadm / kubelet / kubectl 설치 (모든 마스터 공통)
+- name: Master - Kubernetes 컴포넌트 설치
+  ansible.builtin.package:
+    name:
+      - kubeadm
+      - kubelet
+      - kubectl
+    state: present
+  become: true
+
+- name: Master - kubelet 서비스 활성화
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true
+  become: true
+
+# 3) /etc/kubernetes 디렉터리 생성 (master01에서 init 전에 필요)
+- name: Master - /etc/kubernetes 디렉터리 생성 (master01 only)
+  ansible.builtin.file:
+    path: /etc/kubernetes
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - inventory_hostname == groups['masters'][0]
+    - master_admin_conf is defined
+    - not master_admin_conf.stat.exists
+  become: true
+
+# 4) 첫 번째 마스터에서만 kubeadm init (이미 초기화 되어 있으면 스킵)
+- name: Master - kubeadm config 템플릿 생성 (master01 only)
+  ansible.builtin.template:
+    src: kubeadm-config.yaml.j2
+    dest: /etc/kubernetes/kubeadm-config.yaml
+  when:
+    - inventory_hostname == groups['masters'][0]
+    - master_admin_conf is defined
+    - not master_admin_conf.stat.exists
+  become: true
+
+- name: Master - kubeadm init 실행 (master01 only, 최초 1회)
+  ansible.builtin.command: >
+    kubeadm init --config /etc/kubernetes/kubeadm-config.yaml
+  register: kubeadm_init_result
+  when:
+    - inventory_hostname == groups['masters'][0]
+    - master_admin_conf is defined
+    - not master_admin_conf.stat.exists
+  become: true
+
+# kubeconfig 생성은 shell로 처리 (admin.conf가 있어야 함)
+- name: Master - kubeconfig 생성 (master01 only)
+  ansible.builtin.shell: |
+    mkdir -p $HOME/.kube
+    cp /etc/kubernetes/admin.conf $HOME/.kube/config
+    chown $(id -u):$(id -g) $HOME/.kube/config
+  args:
+    executable: /bin/bash
+  when: inventory_hostname == groups['masters'][0]
+  become: true
+
+# 5) control-plane join에 필요한 cert-key + join 명령 생성
+#    ★ admin.conf 존재(=init 성공) 이후에만 실행되도록 조건을 둠
+- name: Master - control-plane cert key + join 명령 생성 (master01에서 1번만)
+  block:
+    - name: Master - upload certs (master01)
+      ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
+      register: upload_result
+      changed_when: true
+      become: true
+
+    - name: Master - cert key 저장 (master01)
+      ansible.builtin.set_fact:
+        k8s_cert_key: "{{ upload_result.stdout_lines[-1] }}"
+
+    - name: Master - join command 생성 (master01)
+      ansible.builtin.command: >
+        kubeadm token create --print-join-command
+        --certificate-key {{ k8s_cert_key }}
+      register: join_cmd_result
+      changed_when: true
+      become: true
+
+    - name: Master - control-plane join command fact 저장 (master01)
+      ansible.builtin.set_fact:
+        controlplane_join_cmd: "{{ join_cmd_result.stdout }}"
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  when:
+    - hostvars[groups['masters'][0]].master_admin_conf is defined
+    - hostvars[groups['masters'][0]].master_admin_conf.stat.exists
+
+# 6) master02 / master03 가 이미 control-plane 인지 확인
+- name: Master - 이미 control-plane 인지 확인 (master02/master03)
+  ansible.builtin.stat:
+    path: /etc/kubernetes/manifests/kube-apiserver.yaml
+  register: master_cp_manifest
+  when: inventory_hostname != groups['masters'][0]
+
+# 7) master02 / master03 control-plane join
+- name: Master - control-plane join (master02/master03)
+  ansible.builtin.shell: >
+    {{ hostvars[groups['masters'][0]].controlplane_join_cmd }}
+    --cri-socket unix:///var/run/crio/crio.sock
+    --control-plane
+  when:
+    - inventory_hostname != groups['masters'][0]
+    - master_cp_manifest is defined
+    - not master_cp_manifest.stat.exists
+    - hostvars[groups['masters'][0]].controlplane_join_cmd is defined
+  become: true

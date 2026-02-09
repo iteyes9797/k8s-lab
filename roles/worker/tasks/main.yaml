@@ -1,0 +1,57 @@
+---
+# 1) Kubernetes Repo 설정 (워커 공통)
+- name: Worker - Kubernetes repo 설정
+  ansible.builtin.yum_repository:
+    name: "kubernetes"
+    description: "Kubernetes Repo"
+    baseurl: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repomd.xml.key"
+  become: true
+
+# 2) kubeadm / kubelet / kubectl 설치
+- name: Worker - Kubernetes 컴포넌트 설치
+  ansible.builtin.package:
+    name:
+      - kubeadm
+      - kubelet
+      - kubectl
+    state: present
+  become: true
+
+- name: Worker - kubelet 서비스 활성화
+  ansible.builtin.systemd:
+    name: kubelet
+    enabled: true
+  become: true
+
+# 3) 이 노드가 이미 클러스터에 join 되었는지 확인
+- name: Worker - kubelet.conf 존재 여부 확인
+  ansible.builtin.stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: worker_kubelet_conf
+
+# 4) master01 에서 워커용 join 명령 생성 (각 워커가 master01에 요청)
+- name: Worker - master01에서 join 명령 생성
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: worker_join_cmd_result
+  changed_when: false
+  delegate_to: "{{ groups['masters'][0] }}"
+  when: not worker_kubelet_conf.stat.exists
+  become: true
+
+- name: Worker - join 명령 Fact로 저장 (각 워커별)
+  ansible.builtin.set_fact:
+    worker_join_cmd: "{{ worker_join_cmd_result.stdout }}"
+  when: not worker_kubelet_conf.stat.exists
+
+# 5) 워커 노드에서 join 실행
+- name: Worker - 클러스터에 join
+  ansible.builtin.shell: >
+    {{ worker_join_cmd }}
+    --cri-socket unix:///var/run/crio/crio.sock
+  when:
+    - not worker_kubelet_conf.stat.exists
+    - worker_join_cmd is defined
+  become: true

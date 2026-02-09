@@ -1,0 +1,23 @@
+---
+- name: LB - HAProxy 패키지 설치
+  ansible.builtin.package:
+    name: haproxy
+    state: present
+  become: true
+
+- name: LB - haproxy.cfg 배포
+  ansible.builtin.template:
+    src: "haproxy.cfg.j2"
+    dest: "/etc/haproxy/haproxy.cfg"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "LB - HAProxy 재시작"
+  become: true
+
+- name: LB - HAProxy 서비스 활성화 및 기동
+  ansible.builtin.systemd:
+    name: haproxy
+    state: started
+    enabled: true
+  become: true

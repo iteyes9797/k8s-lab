@@ -1,0 +1,76 @@
+---
+# 0) 공통 OS 설정 + 컨테이너 런타임 설치
+- name: 모든 노드 공통 OS 준비 및 컨테이너 런타임 설치
+  hosts: masters, workers, nfs, lb
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: common
+      tags: [common]
+
+    # 컨테이너 런타임은 마스터/워커 노드에만 설치
+    - role: container_runtime
+      tags: [runtime]
+      when: "'masters' in group_names or 'workers' in group_names"
+
+# 1) HAProxy 로드밸런서 서버 설정
+- name: HAProxy LB 서버 설정
+  hosts: lb
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: lb
+      tags: [lb]
+
+# 2) 마스터 노드 쿠버네티스 컨트롤 플레인 구성
+- name: 마스터 노드에 쿠버네티스 Control Plane 구성
+  hosts: masters
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: master
+      tags: [master]
+
+
+# 3) 워커 노드에 쿠버네티스 Join 구성
+- name: 워커 노드에 쿠버네티스 Worker 구성
+  hosts: workers
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: worker
+      tags: [worker]
+
+
+# 4) CNI 설치 (예: Calico) - 첫 번째 마스터에서 한 번만 실행
+- name: CNI 플러그인 설치 (Calico 등)
+  hosts: masters[0]
+  gather_facts: false
+  become: true
+
+  roles:
+    - role: cni
+      tags: [cni]
+# 5) NFS 서버 설정
+- name: NFS 서버 설정
+  hosts: nfs
+  gather_facts: true
+  become: true
+
+  roles:
+    - role: nfs_server
+      tags: [nfs]
+
+# 6) 클러스터 정리 (필요시에만 --tags k8s-reset 으로 실행)
+
+- name: Kubernetes Reset Only
+  hosts: masters:workers
+  gather_facts: true
+  become: true
+  roles:
+    - role: k8s_reset
+      tags: [k8s-reset]

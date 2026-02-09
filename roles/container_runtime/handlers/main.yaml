@@ -1,0 +1,6 @@
+---
+- name: 런타임 - CRI-O 재시작
+  ansible.builtin.systemd:
+    name: crio
+    state: restarted
+  become: true

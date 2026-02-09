@@ -1,0 +1,15 @@
+nfs:
+  server: 192.168.0.109
+  path: /nfs/data
+
+storageClass:
+  create: true
+  name: nfs-client        
+  defaultClass: false         # 디폴트로 쓸 거면 true
+  reclaimPolicy: Delete
+  mountOptions:
+    - vers=4.1
+  archiveOnDelete: false
+
+# deploy namespace
+namespace: nfs-provisioner

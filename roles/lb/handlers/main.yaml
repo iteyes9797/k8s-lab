@@ -1,0 +1,6 @@
+---
+- name: LB - HAProxy 재시작
+  ansible.builtin.systemd:
+    name: haproxy
+    state: restarted
+  become: true

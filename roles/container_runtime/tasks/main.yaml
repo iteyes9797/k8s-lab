@@ -1,0 +1,87 @@
+---
+# CRI-O 컨테이너 런타임 설치/설정 role
+
+# 0. 이 노드에서 CRI-O를 사용하지 않으면 스킵
+- name: 런타임 - 이 호스트는 CRI-O 대상이 아님 (container_runtime != 'crio')
+  ansible.builtin.meta: end_host
+  when: container_runtime != "crio"
+
+# 1. CRI-O 필요 커널 모듈 설정 (overlay, br_netfilter)
+- name: 런타임 - CRI-O용 커널 모듈 설정 파일 생성
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/crio.conf
+    content: |
+      overlay
+      br_netfilter
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: 런타임 - CRI-O용 커널 모듈 로드
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: true
+
+# 2. sysctl 설정 (IP 포워딩, 브리지 패킷 포워딩 등)
+- name: 런타임 - CRI-O용 sysctl 설정 파일 생성
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-kubernetes-crio.conf
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: 런타임 - sysctl 적용
+  ansible.builtin.command: sysctl --system
+  register: runtime_sysctl_result
+  changed_when: "'Reloading' in runtime_sysctl_result.stdout or 'Applying' in runtime_sysctl_result.stdout"
+  become: true
+
+# 3. CRI-O YUM/DNF repo 설정 (RHEL 계열)
+- name: 런타임 - CRI-O Repo 설정 (RedHat 계열)
+  ansible.builtin.template:
+    src: crio.repo.j2
+    dest: /etc/yum.repos.d/crio.repo
+    owner: root
+    group: root
+    mode: "0644"
+  when: ansible_os_family == "RedHat"
+  become: true
+
+# 4. CRI-O 패키지 설치
+- name: 런타임 - CRI-O 패키지 설치
+  ansible.builtin.package:
+    name:
+      - cri-o
+    state: present
+  become: true
+
+# 5. CRI-O cgroup 설정(systemd)
+- name: 런타임 - CRI-O cgroup 설정 파일 생성(systemd)
+  ansible.builtin.copy:
+    dest: /etc/crio/crio.conf.d/99-kubernetes-cgroup.conf
+    content: |
+      [crio.runtime]
+      cgroup_manager = "systemd"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "런타임 - CRI-O 재시작"
+  become: true
+
+# 6. CRI-O 서비스 활성화 및 기동
+- name: 런타임 - CRI-O 서비스 활성화 및 기동
+  ansible.builtin.systemd:
+    name: crio
+    state: started
+    enabled: true
+  become: true

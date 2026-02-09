@@ -1,0 +1,37 @@
+---
+# 1) NFS 관련 패키지 설치
+- name: NFS - nfs-utils 패키지 설치
+  ansible.builtin.package:
+    name:
+      - nfs-utils
+    state: present
+  become: true
+
+# 2) export 디렉터리 생성
+- name: NFS - export 디렉터리 생성
+  ansible.builtin.file:
+    path: "{{ nfs_export_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# 3) /etc/exports 템플릿 배포
+- name: NFS - /etc/exports 설정
+  ansible.builtin.template:
+    src: exports.j2
+    dest: /etc/exports
+    owner: root
+    group: root
+    mode: "0644"
+  notify: "NFS - export 재적용"
+  become: true
+
+# 4) NFS 서비스 활성화 및 기동
+- name: NFS - nfs-server 서비스 활성화 및 기동
+  ansible.builtin.systemd:
+    name: nfs-server
+    state: started
+    enabled: true
+  become: true

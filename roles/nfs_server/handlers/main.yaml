@@ -1,0 +1,4 @@
+---
+- name: NFS - export 재적용
+  ansible.builtin.command: exportfs -ra
+  become: true

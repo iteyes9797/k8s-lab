@@ -1,0 +1,8 @@
+apiVersion: v1
+data:
+  .dockerconfigjson: eyJhdXRocyI6eyJodHRwczovL2luZGV4LmRvY2tlci5pby92MS8iOnsidXNlcm5hbWUiOiJpdGVjbG91ZGNlbnRlciIsInBhc3N3b3JkIjoiaXRleWVzNzk3OSFAIiwiZW1haWwiOiJzb2xvaEBpdGV5ZXMuY28ua3IiLCJhdXRoIjoiYVhSbFkyeHZkV1JqWlc1MFpYSTZhWFJsZVdWek56azNPU0ZBIn19fQ==
+kind: Secret
+metadata:
+  name: dockerhub-creds
+  namespace: argo
+type: kubernetes.io/dockerconfigjson
