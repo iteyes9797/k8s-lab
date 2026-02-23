@@ -23,7 +23,7 @@
     name:
       - kubeadm
       - kubelet
-      - kubectl
+      - kubectl 
     state: present
   become: true
 
@@ -80,7 +80,7 @@
   become: true
 
 # 5) control-plane join에 필요한 cert-key + join 명령 생성
-#    ★ admin.conf 존재(=init 성공) 이후에만 실행되도록 조건을 둠
+#    admin.conf 존재(=init 성공) 이후에만 실행되도록 조건을 둠
 - name: Master - control-plane cert key + join 명령 생성 (master01에서 1번만)
   block:
     - name: Master - upload certs (master01)
