@@ -14,25 +14,31 @@ spec:
 
   arguments:
     parameters:
-      # ===== Git credentials (GitHub PAT 권장) =====
+      # ===== Git credentials (GitHub PAT ) =====
       - name: git_username
         value: ""
+        description: "GitHub username"
       - name: git_password
         value: ""
+        description: "GitHub Personal Access Token (PAT) with repo permissions"
 
       # ===== Source repo =====
       - name: source_git_repo
         description: "https://github.com/org/repo.git"
       - name: source_git_ref
         value: main
+        description: "branch or tag to build (e.g. main or v1.2.3)"
 
       # 단일 repo 내 여러 디렉토리 지원 (., fe/, api/ ...)
       - name: project_dir
         value: "."
+        description: "project dir in source repo (e.g. ., fe, api)"
       - name: project_type
         value: fe  # fe | java
+        description: "type of project to build (e.g. fe(Node) or java)"
       - name: fe_output_dir
         value: dist
+        description: "FE output dir relative to project_dir (e.g. dist, build). Only used when project_type=fe"
 
       # ===== Image =====
       - name: image_repo
@@ -69,7 +75,7 @@ spec:
       - name: manifest_container_name
         value: ""
       
-      # Mnanifest repo에 대한 git 계정 설정 (소스 repo와 동일한 계정이면 생략 가능)
+      # Mnanifest repo에 대한 git 계정 설정
       - name: manifest_git_username
         value: ""
       - name: manifest_git_password
