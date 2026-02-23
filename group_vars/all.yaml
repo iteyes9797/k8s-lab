@@ -25,6 +25,7 @@ crio_repo_name: "CRI-O"
 crio_repo_baseurl: "https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/rpm/"
 crio_repo_gpgcheck: 1
 crio_repo_gpgkey: "https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/rpm/repodata/repomd.xml.key"
+
 # --- Kubernetes 네트워크 설정 ---
 # Pod CIDR: Node 대역과 절대 겹치지 않도록 설정 (default: 10.244.0.0/16)
 pod_network_cidr: "10.244.0.0/16"

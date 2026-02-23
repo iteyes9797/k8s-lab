@@ -1,5 +1,5 @@
 ---
-# 1) Calico 매니페스트 다운로드 (master01 only)
+# 1) Calico 매니페스트 다운로드 (master01 only) container network interface (CNI) 설치
 - name: CNI - Calico 매니페스트 다운로드
   ansible.builtin.get_url:
     url: "{{ calico_manifest_url }}"
