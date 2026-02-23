@@ -16,7 +16,7 @@
 #### 0. 서버 구성도 (Architecture Diagram)
 ```mermaid
 graph TD
-    User[User / Developer]
+    User[User / Developer / Bastion Host]
     
     subgraph "Load Balancer Network"
         LB[HAProxy VIP<br/>192.168.0.110]
@@ -37,7 +37,7 @@ graph TD
         NFS[NFS Server<br/>192.168.0.109]
     end
 
-    User -- "API Request (TCP 6443)" --> M1
+    User -- "API/Helm  Request (TCP 6443)" --> LB
     User -- "Web Access (HTTP 30008 / HTTPS 30043)" --> W1
     
     M1-->LB -- "Load Balancing" --> W1
@@ -101,16 +101,93 @@ Argo CD 및 주요 서비스의 접속 포트 정보입니다.
 
 ### 🚀 설치 및 사용 방법
 
-#### 사전 요구 사항
-*   Ansible이 설치된 Control Node(192.168.0.106)
-*   대상 서버들의 SSH 접속 설정 (SSH Key)
-*   `inventories/production/hosts.ini` 파일에 대상 호스트 IP 설정
+#### 사전 요구 사항 & SSH 설정
 
-#### 클러스터 구축 실행
+**1. SSH 키 생성 및 배포 (필수)**
+Ansible이 대상 서버에 패스워드 없이 접속하려면 SSH 키 배포가 필요합니다.
+
+1) **SSH 키 생성** (Control Node에서 실행)
+   ```bash
+   # 기본값 엔터로 생성
+   ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519
+   ```
+
+2) **각 노드에 공개키 배포**
+   생성된 공개키를 모든 관리 대상 서버(Master, Worker, LB, NFS)에 복사합니다.
+   ```bash
+   # Master Nodes
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.106
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.107
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.108
+
+   # Worker Nodes
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.111
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.112
+
+   # Infra Nodes (NFS, LB)
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.109
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub root@192.168.0.110
+   ```
+
+**2. Ansible 포트 및 키 설정 (`hosts.ini`)**
+배포한 키 경로를 `inventories/production/hosts.ini` 파일에 명시해야 Ansible이 인식합니다.
+
+```ini
+[all:vars]
+ansible_user=root
+# 위에서 생성한 개인키 경로 지정
+ansible_ssh_private_key_file=~/.ssh/id_ed25519
+ansible_python_interpreter=/usr/bin/python3
+```
+
+**3. 실행 환경 구성 (Control Node)**
+이 프로젝트를 실행하기 위해 제어 노드(내 컴퓨터 또는 Bastion 서버)에 다음 도구들이 설치되어 있어야 합니다.
+
+*   **Python 3.9 이상**: Ansible 실행을 위한 필수 런타임
+*   **Ansible Core**: 인프라 자동화 도구
+    ```bash
+    # pip로 설치 예시
+    pip install ansible
+    ```
+*   **VS Code Extensions (권장)**: 코드 편집 및 문법 강조를 위해 다음 확장 프로그램 설치를 권장합니다.
+    *   [Ansible](https://marketplace.visualstudio.com/items?itemName=redhat.ansible) (Red Hat)
+    *   [Kubernetes](https://marketplace.visualstudio.com/items?itemName=ms-kubernetes-tools.vscode-kubernetes-tools) (Microsoft)
+    *   [Remote Development](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack) (원격 접속 시)
+
+*   `inventories/production/hosts.ini` 파일에 대상 호스트 IP가 맞는지 확인
+
+#### 클러스터 구축 실행 (전체 또는 단계별)
+
+**옵션 1: 전체 클러스터 한번에 구축**
+```bash
+## OS 설정 -> 런타임 -> LB -> Master -> Worker -> CNI -> NFS
+ansible-playbook site.yaml
+```
+
+**옵션 2: 태그를 이용한 단계별 구축 (권장)**
+디버깅이나 단계별 확인이 필요한 경우, 아래 순서대로 태그(`--tags`)를 지정하여 실행합니다.
 
 ```bash
-## 전체 클러스터 구축 (OS 설정 -> 런타임 -> LB -> Master -> Worker -> CNI -> NFS)
-ansible-playbook -i inventories/production/hosts.ini site.yaml
+# 1. 공통 OS 설정 (Swap 비활성화, 필수 패키지 설치 등)
+ansible-playbook site.yaml --tags common
+
+# 2. 컨테이너 런타임 설치 (CRI-O)
+ansible-playbook site.yaml --tags runtime
+
+# 3. 로드밸런서(HAProxy) 구성
+ansible-playbook site.yaml --tags lb
+
+# 4. 마스터 노드(Control Plane) 구성 (Init, Join)
+ansible-playbook site.yaml --tags master
+
+# 5. 워커 노드 구성 (Join)
+ansible-playbook site.yaml --tags worker
+
+# 6. CNI 네트워크 플러그인 설치 (Calico)
+ansible-playbook site.yaml --tags cni
+
+# 7. NFS 스토리지 서버 구성
+ansible-playbook site.yaml --tags nfs
 ```
 
 #### 클러스터 초기화 (Reset)
@@ -118,7 +195,7 @@ ansible-playbook -i inventories/production/hosts.ini site.yaml
 
 ```bash
 ## 예시: reset 역할 실행 (site.yaml에 포함되어 있거나 별도 실행 필요)
-ansible-playbook -i inventories/production/hosts.ini site.yaml --tags k8s_reset
+ansible-playbook site.yaml --tags k8s_reset
 ```
 
 ### 📂 프로젝트 구조
@@ -126,10 +203,10 @@ ansible-playbook -i inventories/production/hosts.ini site.yaml --tags k8s_reset
 ```text
 .
 ├── ansible.cfg              # Ansible 설정
-├── site.yaml                # 메인 플레이북
-├── inventories/             # 호스트 인벤토리
+├── site.yaml                # 메인 플레이북 Ansible
+├── inventories/             # 호스트 인벤토리 Ansible
 ├── group_vars/              # 전역 변수 (K8s 버전, CIDR 등)
-├── roles/                   # Ansible Role 정의
+├── roles/                   # Ansible Role 정의 Ansible
 │   ├── common               # 공통 설정
 │   ├── container_runtime    # CRI-O 등 런타임
 │   ├── master               # K8s Master
