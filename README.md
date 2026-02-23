@@ -143,6 +143,25 @@ ansible-playbook -i inventories/production/hosts.ini site.yaml --tags k8s_reset
 └── argo-*.yaml              # ArgoCD/Workflows 관련 매니페스트
 ```
 
+#### 📌 주요 디렉토리 및 파일 상세 설명
+
+*   **`ansible.cfg`**: Ansible 실행 시 참조하는 설정 파일입니다. 인벤토리 파일 위치, SSH 접속 설정, 권한 상승(sudo) 관련 설정을 정의합니다.
+*   **`site.yaml`**: 전체 인프라 구축 프로세스를 정의하는 메인 Playbook입니다. 각 Role을 순서대로 호출하여 클러스터를 완성합니다.
+*   **`inventories/`**: 관리 대상 서버들의 접속 정보(IP, User, Key)와 그룹(Master, Worker, LB, NFS)을 정의하는 호스트 파일(`hosts.ini`)이 위치합니다.
+*   **`group_vars/`**: 모든 호스트 또는 특정 그룹에 적용될 공통 변수(`k8s_version`, `pod_network_cidr` 등)를 관리합니다.
+*   **`roles/`**: Ansible의 실행 단위를 기능별로 분리한 모듈 디렉토리입니다.
+    *   **`common`**: 모든 서버에 공통적으로 적용되는 OS 설정 (Swap off, Firewalld stop, SELinux 등)
+    *   **`container_runtime`**: 모든 K8s 노드에 컨테이너 런타임(CRI-O) 설치 및 설정
+    *   **`lb`**: Control Plane의 고가용성(HA)을 위한 HAProxy 로드밸런서 구성
+    *   **`master`**: `kubeadm init`을 통한 Control Plane 초기화 및 Join Token 생성
+    *   **`worker`**: `kubeadm join`을 사용한 워커 노드 클러스터 연결
+    *   **`cni`**: Pod 간 통신을 위한 네트워크 플러그인(Calico) 배포
+    *   **`nfs_server`**: 공유 스토리지를 위한 NFS 서버 패키지 설치 및 설정
+*   **`helm/`**: Kubernetes 필수 애드온(Ingress, Cert-Manager, ArgoCD 등) 설치를 위한 Helm Values 파일과 설치 가이드를 포함합니다.
+*   **`k8s/`**: Helm 차트 외에 직접 적용해야 하는 추가 매니페스트(StorageClass, PVC 등)를 보관합니다.
+*   **`dockerfiles/`**: CI/CD 파이프라인 테스트를 위한 다양한 언어/환경별(Java, Node, Nginx) Dockerfile 예제입니다.
+*   **`argo-*.yaml`**: Argo Workflows(CI) 및 Argo CD(CD)에서 사용하는 파이프라인 정의 및 애플리케이션 배포 설정 파일입니다.
+
 ### 📝 환경 변수 설정
 `group_vars/all.yaml` 파일에서 주요 설정을 변경할 수 있습니다.
 
