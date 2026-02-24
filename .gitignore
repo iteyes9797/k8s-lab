@@ -1,0 +1,4 @@
+# Ignore Terraform workspace/state in Azure lab
+azure/terraform/
+azure/.terraform/
+naver/.terraform/

@@ -38,7 +38,7 @@ graph TD
     end
 
     User -- "API/Helm  Request (TCP 6443)" --> LB
-    User -- "Web Access (HTTP 30008 / HTTPS 30043)" --> W1
+    User -- "Argo CD Web Access (HTTP 30008 / HTTPS 30043)" --> W1
     
     M1-->LB -- "Load Balancing" --> W1
     M2-->LB -- "Load Balancing" --> W2

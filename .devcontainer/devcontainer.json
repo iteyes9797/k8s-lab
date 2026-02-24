@@ -1,7 +1,7 @@
 {
   "name": "k8s-ansible-dev",
   "context": "..",
-  "dockerFile": "../Dockerfile",
+  "dockerFile": "../dockerfiles/devcontainer.dockerfile",
   "workspaceFolder": "/workspace",
   "mounts": [
     "source=${localWorkspaceFolder},target=/workspace,type=bind"

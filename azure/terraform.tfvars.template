@@ -1,0 +1,17 @@
+# Copy this file to terraform.tfvars and adjust values for your environment.
+
+# Common settings
+location            = "Korea Central"
+resource_group_name = "k8s-lab-rg"
+admin_username      = "azureuser"
+admin_password      = "P@ssw0rd1234!"
+
+# SSH public key path (choose one for your runtime)
+# Windows PowerShell (local run)
+# ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# Dev Container / WSL (example)
+# ssh_public_key_path = "/home/vscode/.ssh/id_rsa.pub"
+
+# Default (works for most local shells)
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
