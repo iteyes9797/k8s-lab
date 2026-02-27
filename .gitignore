@@ -2,3 +2,11 @@
 azure/terraform/
 azure/.terraform/
 naver/.terraform/
+
+# Terraform common artifacts
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+terraform.exe
