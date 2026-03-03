@@ -288,3 +288,9 @@ docker build -t k8s-lab-node -f dockerfiles/node-dockerfile .
 | `lb` | HAProxy 설치 및 설정 배포, 서비스 활성화 |
 | `nfs_server` | NFS 패키지 설치, export 디렉터리/`/etc/exports` 설정, 서비스 활성화 |
 | `k8s_reset` | `kubeadm reset`, K8s/CNI 디렉터리 정리, CNI 인터페이스 및 iptables 정리, kubelet 재시작 |
+
+## 🤝 Contribution Guide
+
+협업 및 브랜치 전략은 아래 문서를 참고하세요.
+
+👉 [Contribution Guide](CONTRIBUTING.md)
