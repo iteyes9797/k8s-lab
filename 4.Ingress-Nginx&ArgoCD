@@ -1,0 +1,139 @@
+맞습니다. 운영 환경에서는 수십 개의 서비스마다 30000번대 포트를 일일이 개방하는 것이 아니라, **80(HTTP)/443(HTTPS)** 딱 두 문만 열어두고 **Ingress(안내 데스크)**가 도메인에 따라 통행을 정리하는 것이 표준입니다.
+
+한우리님이 받은 조언대로, **Ingress-Nginx**를 사용하여 **`argocd.<공인IP>.nip.io`** 주소로 접속하는 **운영 표준형(B안) 복붙 가이드**를 만들어 드립니다. 이번에는 특히 직접 구축한 VM 환경에서 로드밸런서 없이 80/443 포트를 점유하는 핵심 비기(`hostNetwork`)를 포함했습니다.
+
+---
+
+# 🌐 Stage 4: Ingress-Nginx를 이용한 운영 표준형 ArgoCD 노출
+
+이 가이드는 로드밸런서가 없는 Azure VM 환경에서 **Ingress-Nginx**를 '관문'으로 세우고, ArgoCD를 안전하고 깔끔하게 연결하는 전 과정을 다룹니다.
+
+## 1단계: 테라폼 수정 (정문 80/443 개방)
+
+기존 30000번대 포트 대신, 웹 표준 포트인 80과 443을 엽니다.
+
+**`network.tf` 수정 내역:**
+
+```hcl
+# 기존 NodePort 규칙은 삭제하거나 유지하고, 아래 규칙을 추가합니다.
+resource "azurerm_network_security_rule" "http_https" {
+  name                        = "Allow-Web-Traffic"
+  priority                    = 1005
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  # 80(HTTP), 443(HTTPS) 정문을 엽니다.
+  destination_port_ranges     = ["80", "443"] 
+  source_address_prefix       = "*"
+  destination_address_prefix  = "*"
+  resource_group_name         = azurerm_resource_group.rg.name
+  network_security_group_name = azurerm_network_security_group.nsg.name
+}
+
+```
+
+---
+
+## 2단계: Ingress-Nginx 컨트롤러 설치 (비기: hostNetwork)
+
+직접 구축한 VM에서는 `LoadBalancer`가 작동하지 않으므로, 인그레스 컨트롤러가 VM의 80/443 포트를 직접 점유하도록 설정해야 합니다.
+
+**마스터 서버 터미널 실행:**
+
+```bash
+# 1. 헬름 레포지토리 추가
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+
+# 2. hostNetwork 모드로 설치 (VM의 80, 443 포트를 직접 사용)
+helm install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx --create-namespace \
+  --set controller.hostNetwork=true \
+  --set controller.service.type=ClusterIP \
+  --set controller.kind=DaemonSet
+
+```
+
+---
+
+## 3단계: ArgoCD 설정 변경 (Ingress용)
+
+인그레스가 대신 통신해주기 때문에, ArgoCD는 내부적으로 가장 단순한 HTTP 모드로 동작하게 만듭니다.
+
+**마스터 서버 터미널 실행:**
+
+```bash
+# 1. ArgoCD를 Insecure(HTTP) 모드로 고정
+kubectl patch cm argocd-cmd-params-cm -n argo --type merge -p '{"data": {"server.insecure": "true"}}'
+
+# 2. 서비스 타입을 다시 기본(ClusterIP)으로 변경 (외부 노출은 이제 인그레스가 담당)
+kubectl patch svc argocd-server -n argo -p '{"spec": {"type": "ClusterIP"}}'
+
+# 3. 반영을 위한 재시작
+kubectl rollout restart deployment argocd-server -n argo
+
+```
+
+---
+
+## 4단계: Ingress 규칙(Route) 생성
+
+이제 "어떤 주소로 들어오면 ArgoCD로 보내줄지" 정의합니다. 별도의 도메인 구매 없이도 사용할 수 있게 **`nip.io`**를 활용합니다.
+
+**`argocd-ingress.yaml` 파일 생성 및 적용:**
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argo
+  annotations:
+    # Nginx에게 백엔드(ArgoCD)가 HTTP임을 알림
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: argocd.20.196.204.108.nip.io # [본인의 공인IP를 넣으세요]
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+
+```
+
+**적용 명령어:**
+
+```bash
+kubectl apply -f argocd-ingress.yaml
+
+```
+
+---
+
+## 5단계: 최종 접속 확인
+
+이제 포트 번호를 붙일 필요가 없습니다!
+
+* **접속 주소:** `http://argocd.20.196.204.108.nip.io`
+* **동작 원리:** 1. 브라우저가 80번 포트로 접속
+2. VM의 80번을 점유 중인 **Ingress-Nginx**가 신호를 받음
+3. 인그레스가 호스트 이름(`argocd...`)을 보고 **argo** 네임스페이스의 **argocd-server** 서비스로 전달
+
+---
+
+### 💡 왜 이렇게 하나요? (운영적 이점)
+
+1. **보안:** 이제 NSG에서 30000번대 포트를 다 닫아도 됩니다. 정문(80, 443)만 관리하면 됩니다.
+2. **확장성:** 나중에 Jenkins나 Grafana를 추가해도 포트를 새로 열 필요 없이 `jenkins.20.196...nip.io` 식으로 인그레스 규칙만 추가하면 됩니다.
+3. **표준화:** 실무에서는 이 구조 앞에 SSL 인증서만 입혀서 바로 서비스를 운영합니다.
+
+이제 **포트 번호 없는 깔끔한 도메인 주소**로 ArgoCD에 접속해 보세요! 성공하신다면 정말로 "실무급 인프라 구축"에 성공하신 겁니다. 🐙
+
+성공적으로 접속이 된다면, **인증서(HTTPS)까지 자동으로 관리해주는 `cert-manager` 설정법**도 이어서 알려드릴까요?
