@@ -2,11 +2,12 @@
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: ClusterConfiguration
 kubernetesVersion: "v1.32.0"
-controlPlaneEndpoint: "192.168.0.110:6443"
+controlPlaneEndpoint: "10.0.1.10:6443" 
 networking:
   podSubnet: "10.244.0.0/16"
 ---
 apiVersion: kubeadm.k8s.io/v1beta4
 kind: InitConfiguration
-nodeRegistration:
+nodeRegistration:  
+  # 만약 containerd를 설치한다면 unix:///var/run/containerd/containerd.sock 로 수정 필요
   criSocket: "unix:///var/run/crio/crio.sock"

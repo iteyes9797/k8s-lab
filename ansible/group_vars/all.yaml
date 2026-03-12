@@ -1,0 +1,56 @@
+---
+# =============================
+# Global Variables for Kubernetes Cluster
+# =============================
+
+# --- [추가] Ansible 접속 설정 (Azure Dynamic Inventory 연동) ---
+ansible_user: "azureuser"
+ansible_ssh_private_key_file: "~/.ssh/id_rsa"
+ansible_python_interpreter: "/usr/bin/python3"
+
+# --- 기본 환경 ---
+timezone: "Asia/Seoul"
+
+# --- Kubernetes 버전 ---
+kubernetes_version: "1.32.0"
+
+# kubeadm 에서 사용할 ControlPlane 엔드포인트 (LB IP 기준)
+# k8s_api_vip: "192.168.0.110" -- 로컬 환경용
+k8s_api_vip: "10.0.1.110"
+k8s_api_port: 6443
+k8s_control_plane_endpoint: "{{ k8s_api_vip }}:{{ k8s_api_port }}"
+
+# --- Container Runtime 설정 (CRI-O 사용) ---
+container_runtime: "crio"
+crio_repo_version: "v1.32"
+# [기존 RedHat/CentOS 설정 - 주석 처리]
+# crio_repo_id: "cri-o"
+# crio_repo_name: "CRI-O"
+# crio_repo_baseurl: "https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/rpm/"
+# crio_repo_gpgcheck: 1
+# crio_repo_gpgkey: "https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/rpm/repodata/repomd.xml.key"
+
+# [신규 Ubuntu/Debian 설정]
+crio_debian_repo: "deb [signed-by=/etc/apt/keyrings/cri-o-apt-keyring.gpg] https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/deb/ /"
+crio_gpg_url: "https://pkgs.k8s.io/addons:/cri-o:/stable:/{{ crio_repo_version }}/deb/Release.key"
+
+# --- Kubernetes 네트워크 설정 ---
+# Pod CIDR: Node 대역과 절대 겹치지 않도록 설정 (default: 10.244.0.0/16)
+pod_network_cidr: "10.244.0.0/16"
+# Service CIDR
+service_cidr: "10.96.0.0/12"
+
+# --- NFS 설정 ---
+nfs_export_dir: "/nfs/data"
+# nfs_allowed_subnet: "192.168.0.0/24" -- 로컬 환경용
+nfs_network_cidr: "10.0.1.0/24"
+
+# --- sysctl 기본 설정 (나중에 common 에서 활용 가능) ---
+sysctl_config:
+  - { name: "net.bridge.bridge-nf-call-iptables", value: 1 }
+  - { name: "net.bridge.bridge-nf-call-ip6tables", value: 1 }
+  - { name: "net.ipv4.ip_forward", value: 1 }
+
+# --- CNI (Calico) 설정 ---
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml"
+

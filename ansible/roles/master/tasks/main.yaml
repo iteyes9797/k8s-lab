@@ -1,0 +1,182 @@
+---
+# 0. 기존 흔적 완벽 제거 (재실행 시 꼬임 및 etcd 오염 방지)
+- name: Master - 기존 클러스터 설정 및 서비스 강제 초기화
+  ansible.builtin.shell: |
+    kubeadm reset -f
+    systemctl stop kubelet
+    systemctl stop crio
+    rm -rf /etc/kubernetes/
+    rm -rf /var/lib/kubelet/*
+    rm -rf $HOME/.kube
+    rm -rf /var/lib/etcd
+  become: true
+  ignore_errors: true
+
+# 1. Kubernetes Repo 설정 (OS 계열 자동 감지 및 분기)
+- name: Master - (RedHat) Kubernetes repo 설정
+  ansible.builtin.yum_repository:
+    name: "kubernetes"
+    description: "Kubernetes Repo"
+    baseurl: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key"
+  when: ansible_os_family == "RedHat"
+  become: true
+
+- name: Master - (Debian/Ubuntu) Kubernetes APT 설정
+  block:
+    - name: Master - APT 키링 디렉토리 생성
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+    - name: Master - Kubernetes GPG 키 추가
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | \
+        gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    - name: Master - Kubernetes APT 저장소 추가
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        line: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /"
+        create: yes
+  when: ansible_os_family == "Debian"
+  become: true
+
+# 2. 패키지 설치 및 서비스 초기 상태 설정
+- name: Master - 컴포넌트 설치 (RedHat)
+  ansible.builtin.yum:
+    name: [kubelet, kubeadm, kubectl]
+    state: present
+  when: ansible_os_family == "RedHat"
+  become: true
+
+- name: Master - 컴포넌트 설치 (Debian/Ubuntu)
+  ansible.builtin.apt:
+    name: [kubelet, kubeadm, kubectl]
+    state: present
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+  become: true
+
+- name: Master - CRI-O 및 kubelet 서비스 준비
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: "{{ 'restarted' if item == 'crio' else 'stopped' }}"
+  loop: [crio, kubelet]
+  become: true
+
+# 3. 설정 템플릿 배포 (master01 전용)
+- name: Master - admin.conf 존재 여부 확인
+  ansible.builtin.stat:
+    path: /etc/kubernetes/admin.conf
+  register: master_admin_conf
+  become: true
+
+- name: Master - kubeadm config 배포 (master01)
+  block:
+    - ansible.builtin.file: { path: /etc/kubernetes, state: directory, mode: "0755" }
+    - ansible.builtin.template:
+        src: kubeadm-config.yaml.j2
+        dest: /etc/kubernetes/kubeadm-config.yaml
+  when:
+    - inventory_hostname == groups['masters'][0]
+    - not master_admin_conf.stat.exists
+  become: true
+
+# 4. 첫 번째 마스터 초기화 및 안정화 대기
+- name: Master - kubeadm init 실행 (master01)
+  ansible.builtin.command: >
+    kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
+  register: kubeadm_init_result
+  failed_when: false
+  when:
+    - inventory_hostname == groups['masters'][0]
+    - not master_admin_conf.stat.exists
+  become: true
+
+- name: Master - API 서버 안정화를 위한 강제 대기 (Race Condition 방지)
+  ansible.builtin.pause:
+    seconds: 25
+  when: 
+    - inventory_hostname == groups['masters'][0]
+    - (kubeadm_init_result is defined and kubeadm_init_result is changed)
+
+# 5. 권한 설정 및 헬스체크 (EOF 원천 차단)
+- name: Master - .kube 디렉토리 생성 및 권한 부여 (master01)
+  ansible.builtin.shell: |
+    mkdir -p /home/{{ ansible_user }}/.kube
+    cp -f /etc/kubernetes/admin.conf /home/{{ ansible_user }}/.kube/config
+    chown {{ ansible_user }}:{{ ansible_user }} /home/{{ ansible_user }}/.kube/config
+    chmod 600 /home/{{ ansible_user }}/.kube/config
+  when: inventory_hostname == groups['masters'][0]
+  become: true
+
+- name: Master - API 서버 헬스체크 (Localhost 직접 확인)
+  ansible.builtin.uri:
+    url: https://127.0.0.1:6443/healthz
+    validate_certs: no
+  register: api_health
+  until: api_health.status == 200
+  retries: 40
+  delay: 5
+  when: inventory_hostname == groups['masters'][0]
+
+# 6. Join 정보 공유 (Fact 저장)
+- name: Master - 조인 명령 정보 생성 (master01)
+  block:
+    - ansible.builtin.command: kubeadm init phase upload-certs --upload-certs
+      register: upload_result
+    - ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_cmd_result
+    - ansible.builtin.set_fact:
+        k8s_cert_key: "{{ upload_result.stdout_lines[-1] }}"
+        controlplane_join_cmd: "{{ join_cmd_result.stdout }}"
+        worker_join_cmd: "{{ join_cmd_result.stdout }}"
+  run_once: true
+  delegate_to: "{{ groups['masters'][0] }}"
+  become: true
+  when: inventory_hostname == groups['masters'][0]
+
+# 7. 나머지 마스터(02, 03) 클러스터 합류
+- name: Master - control-plane join 실행 (master02, 03)
+  ansible.builtin.shell: >
+    {{ hostvars[groups['masters'][0]].controlplane_join_cmd }}
+    --control-plane
+    --certificate-key {{ hostvars[groups['masters'][0]].k8s_cert_key }}
+    --cri-socket unix:///var/run/crio/crio.sock
+    --discovery-token-unsafe-skip-ca-verification
+  when:
+    - inventory_hostname != groups['masters'][0]
+    - hostvars[groups['masters'][0]].controlplane_join_cmd is defined
+  become: true
+  ignore_errors: true
+
+# 8. Calico 설치 (LB 우회 및 Server-side Apply 적용)
+- name: Master - Calico 네트워크 설치 (master01)
+  block:
+    - name: API 서버 응답 대기 루프
+      ansible.builtin.shell: |
+        until kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify get nodes; do
+          sleep 5
+        done
+      async: 120
+      poll: 5
+
+    - name: Calico Operator 및 Resource 설치 (Server-side)
+      ansible.builtin.shell: |
+        kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify \
+        apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
+        
+        sleep 10
+        
+        curl -L https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml -o custom-resources.yaml
+        sed -i 's/192.168.0.0\/16/10.244.0.0\/16/g' custom-resources.yaml
+        
+        kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify \
+        apply --server-side --force-conflicts -f custom-resources.yaml
+  when: inventory_hostname == groups['masters'][0]
+  become: false

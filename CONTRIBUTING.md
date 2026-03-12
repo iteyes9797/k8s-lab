@@ -1,17 +1,17 @@
-# 🤝 Contribution & Branch Strategy
+# Contribution & Branch Strategy
 
 본 저장소는 Kubernetes Lab 프로젝트를 위한 협업 및 배포 전략 가이드를 제공합니다.
 
 ---
 
-## 🌳 Branch Strategy
+## Branch Strategy
 
 - `main` : 안정 브랜치 (통합 / 운영 기준)
 - `setup` : 기본 작업 브랜치 (개발 기준)
 
 ---
 
-## 🚀 기본 작업 흐름
+## 기본 작업 흐름
 
 1️⃣ Repository Clone
 
@@ -41,12 +41,12 @@
  3. compare: setup
  4. 리뷰 후 Merge 진행
 
-⚠️ 정책
+# 정책
 
-❌ main 직접 push 금지
+## main 직접 push 금지
 - ✔ 모든 작업은 setup 브랜치에서 진행
 - ✔ main 반영은 Pull Request 필수
 
-🔄 Workflow 요약
+## Workflow 요약
 
  작업 → setup push → Pull Request → main merge

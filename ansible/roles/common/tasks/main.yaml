@@ -1,0 +1,75 @@
+---
+- name: 공통 - 현재 호스트 표시
+  ansible.builtin.debug:
+    msg: "Running 'common' role on {{ inventory_hostname }}"
+
+# 1. swap 비활성화 (런타임)
+- name: 공통 - swap 비활성화
+  ansible.builtin.command: swapoff -a
+  when: ansible_swaptotal_mb | default(0) | int > 0
+  changed_when: true
+  become: true
+
+# 2. /etc/fstab 내 swap 항목 주석 처리
+- name: 공통 - /etc/fstab 내 swap 항목 주석 처리
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^(.*\s+swap\s+.*)$'
+    replace: '# \1'
+  become: true
+
+# 3. firewalld 중지 및 비활성화 (있을 때만)
+- name: 공통 - firewalld 설치 여부 확인
+  ansible.builtin.stat:
+    path: /usr/sbin/firewalld
+  register: common_firewalld_bin
+
+- name: 공통 - firewalld 중지
+  ansible.builtin.systemd:
+    name: firewalld
+    state: stopped
+    enabled: false
+  when: common_firewalld_bin.stat.exists
+  become: true
+
+# 4. SELinux 상태 확인 (RHEL 계열만, 실패 무시)
+- name: 공통 - SELinux 상태 확인
+  ansible.builtin.command: getenforce
+  register: common_selinux_state
+  failed_when: false
+  changed_when: false
+  become: true
+
+- name: 공통 - SELinux 현재 상태 출력
+  ansible.builtin.debug:
+    msg: "SELinux 현재 상태: {{ common_selinux_state.stdout | default('unknown') }}"
+
+# 4-1. SELinux가 Enforcing 이면 Permissive로 전환
+- name: 공통 - SELinux를 Permissive로 변경 (런타임)
+  ansible.builtin.command: setenforce 0
+  when: common_selinux_state.stdout == "Enforcing"
+  changed_when: common_selinux_state.stdout == "Enforcing"
+  become: true
+
+- name: 공통 - /etc/selinux/config 파일에서 SELINUX=permissive 로 변경
+  ansible.builtin.replace:
+    path: /etc/selinux/config
+    regexp: '^SELINUX=enforcing'
+    replace: 'SELINUX=permissive'
+  when: common_selinux_state.stdout == "Enforcing"
+  become: true
+
+# 5. 기본 유틸 및 패키지 설치 (필요시 추가)
+- name: 공통 - 기본 패키지 설치
+  ansible.builtin.package:
+    name:
+      - vim
+      - curl
+      - wget
+      - bash-completion
+      - net-tools
+      - iproute2
+      - lsof
+      - nfs-common
+    state: present
+  become: true
