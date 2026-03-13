@@ -111,7 +111,7 @@ spec:
                 - name: app_dir
                   value: "{{workflow.parameters.manifest_dir}}"
                 - name: image_repo
-                  value: "itecloudcenter/builds"
+                  value: "10.0.1.12/library"
                 - name: image_name
                   value: "{{workflow.parameters.image_name}}"
                 - name: tag
@@ -276,7 +276,9 @@ spec:
         args:
           - --context=/work
           - --dockerfile=/work/Dockerfile.runtime
-          - --destination=docker.io/itecloudcenter/builds:{{steps.bump-tag.outputs.parameters.next_tag}}
+          # - --destination=docker.io/itecloudcenter/builds:{{steps.bump-tag.outputs.parameters.next_tag}}
+          # 수정 후 (Harbor 주소로 직행):
+          - --destination=10.0.1.12/library/app:{{steps.bump-tag.outputs.parameters.next_tag}}
           - --build-arg=NGINX_BASE={{workflow.parameters.nginx_base_image}}
           - --build-arg=JRE_BASE={{workflow.parameters.jre_base_image}}
           - --verbosity=info
@@ -341,7 +343,7 @@ spec:
   volumes:
     - name: docker-config
       secret:
-        secretName: dockerhub-creds
+        secretName: harbor-creds
         items:
           - key: .dockerconfigjson
             path: config.json

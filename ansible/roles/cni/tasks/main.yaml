@@ -7,14 +7,12 @@
 
 - name: CNI - Calico Pod CIDR 자동 치환
   ansible.builtin.shell: |
-    # 기본값 192.168.0.0/16을 group_vars에 정의된 pod_network_cidr로 치환
-    sed -i 's/192\.168\.0\.0\/16/{{ pod_network_cidr | replace("/", "\\/") }}/g' /tmp/calico.yaml
+    sed -i 's@192.168.0.0/16@{{ pod_network_cidr }}@g' /tmp/calico.yaml
   when: inventory_hostname == groups['masters'][0]
   become: true
 
 - name: CNI - Calico 적용
   ansible.builtin.shell: |
-    # root 권한으로 admin.conf를 참조하여 실행
     kubectl apply -f /tmp/calico.yaml --kubeconfig=/etc/kubernetes/admin.conf
   when: inventory_hostname == groups['masters'][0]
   become: true
