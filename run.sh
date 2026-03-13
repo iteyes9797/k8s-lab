@@ -25,6 +25,30 @@ BASTION_IP=$(terraform output -raw bastion_public_ip)
 MASTER_IP=$(terraform output -json vm_internal_ips | jq -r '.master1')
 echo ">>> Detected IPs - Bastion: $BASTION_IP, Master: $MASTER_IP"
 
+# 2. SSH Config 동적 생성
+echo ">>> SSH 관리 환경 자동 동기화 중..."
+
+mkdir -p ~/.ssh
+cat <<EOF > ~/.ssh/config
+# Bastion Host (대문)
+Host bastion
+    HostName ${BASTION_IP}
+    User azureuser
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+
+# 내부 사설망 노드들 (SSH Tunneling 설정)
+# k8s-master01 등의 이름으로 접속 시 자동으로 bastion을 경유하도록 함
+Host k8s-master* k8s-worker* k8s-lb* k8s-nfs*
+    User azureuser
+    ProxyJump bastion
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+EOF
+
+chmod 600 ~/.ssh/config
+echo ">>> SSH Config가 Bastion IP(${BASTION_IP})로 업데이트되었습니다."
+
 # 인벤토리 파일 내 Bastion IP 자동 갱신 (Ansible용)
 sed -i "s/bastion_ip = .*/bastion_ip = $BASTION_IP/g" "$PROJECT_ROOT/ansible/inventories/production/hosts"
 
@@ -40,28 +64,36 @@ python3 -m ansible playbook \
   --extra-vars "ansible_ssh_common_args='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ProxyCommand=\"ssh -o StrictHostKeyChecking=no -W %h:%p -q azureuser@$BASTION_IP\"'"
 
 # 3. Kubeconfig 및 터널링 설정
-echo ">>> [STEP 3] 관리 환경 설정 (Kubeconfig & SSH Tunnel)"
+echo ">>> [STEP 3] 관리 환경 설정 및 인증서 동기화 (Kubeconfig & SSH Tunnel)"
 
-# 6443 포트 점유 확인 및 기존 터널 정리
+# 기존 터널 정리
 TARGET_PID=$(sudo lsof -t -i :6443 || true)
 [ ! -z "$TARGET_PID" ] && sudo kill -9 $TARGET_PID && sleep 1
 
-# SSH 터널 생성
+# 1) SSH 터널 재생성
 ssh -o StrictHostKeyChecking=no -o ExitOnForwardFailure=yes -o ServerAliveInterval=60 \
     -f -N -L 6443:${MASTER_IP}:6443 azureuser@${BASTION_IP}
 
-# admin.conf 복사 및 로컬 최적화 (127.0.0.1 치환 및 TLS 체크 해제)
+# 2) 서버의 최신 admin.conf 강제 복사 (자동화의 핵심)
+# 앤서블이 복사해둔 위치(~/.kube/config)에서 가져옵니다.
 mkdir -p "$PROJECT_ROOT/k8s_configs"
 scp -o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p azureuser@$BASTION_IP" \
-    azureuser@$MASTER_IP:/etc/kubernetes/admin.conf "$KUBECONFIG_PATH"
+    azureuser@$MASTER_IP:~/.kube/config "$KUBECONFIG_PATH"
 
+# 3) 가져온 파일 자동 최적화
+# 서버 IP를 로컬 터널 주소(127.0.0.1)로 변경
 sed -i "s/server: https:\/\/[0-9.]*:6443/server: https:\/\/127.0.0.1:6443/g" "$KUBECONFIG_PATH"
+
+# TLS 체크 해제 및 인증서 데이터 삭제 (동적 환경 대응)
 sed -i '/certificate-authority-data:/d' "$KUBECONFIG_PATH"
 if ! grep -q "insecure-skip-tls-verify: true" "$KUBECONFIG_PATH"; then
     sed -i '/server:/a \    insecure-skip-tls-verify: true' "$KUBECONFIG_PATH"
 fi
+
 chmod 600 "$KUBECONFIG_PATH"
 export KUBECONFIG="$KUBECONFIG_PATH"
+
+echo ">>> [SUCCESS] 인증서 동기화 및 터널링 완료!"
 
 # 4. 네트워크 및 필수 서비스 설치 (NFS & ArgoCD)
 echo ">>> [STEP 4] 네트워크 패치 및 서비스 설치"

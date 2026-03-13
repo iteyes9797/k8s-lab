@@ -82,9 +82,9 @@
     - ansible.builtin.template:
         src: kubeadm-config.yaml.j2
         dest: /etc/kubernetes/kubeadm-config.yaml
+        mode: "0644"
   when:
     - inventory_hostname == groups['masters'][0]
-    - not master_admin_conf.stat.exists
   become: true
 
 # 4. 첫 번째 마스터 초기화 및 안정화 대기
@@ -92,7 +92,6 @@
   ansible.builtin.command: >
     kubeadm init --config /etc/kubernetes/kubeadm-config.yaml --upload-certs
   register: kubeadm_init_result
-  failed_when: false
   when:
     - inventory_hostname == groups['masters'][0]
     - not master_admin_conf.stat.exists
@@ -155,11 +154,13 @@
   become: true
   ignore_errors: true
 
-# 8. Calico 설치 (LB 우회 및 Server-side Apply 적용)
+# 8. Calico 설치 (인증서 경로 및 환경 변수 방어)
 - name: Master - Calico 네트워크 설치 (master01)
   block:
-    - name: API 서버 응답 대기 루프
+    - name: API 서버 응답 대기 루프 (방어형)
       ansible.builtin.shell: |
+        export KUBECONFIG=/home/{{ ansible_user }}/.kube/config
+        export PATH=$PATH:/usr/bin:/usr/local/bin
         until kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify get nodes; do
           sleep 5
         done
@@ -168,15 +169,24 @@
 
     - name: Calico Operator 및 Resource 설치 (Server-side)
       ansible.builtin.shell: |
+        # 1. 환경 변수 강제 주입
+        export KUBECONFIG=/home/{{ ansible_user }}/.kube/config
+        export PATH=$PATH:/usr/bin:/usr/local/bin
+        
+        # 2. Operator 설치 (Server-side Apply로 충돌 방지)
         kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify \
         apply --server-side --force-conflicts -f https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/tigera-operator.yaml
         
-        sleep 10
+        sleep 15  # Operator가 CRD를 생성할 시간을 충분히 확보
         
-        curl -L https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml -o custom-resources.yaml
-        sed -i 's/192.168.0.0\/16/10.244.0.0\/16/g' custom-resources.yaml
+        # 3. Custom Resource 다운로드 및 Pod Subnet 수정
+        curl -L https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/custom-resources.yaml -o /tmp/custom-resources.yaml
+        sed -i 's/192.168.0.0\/16/{{ pod_network_cidr }}/g' /tmp/custom-resources.yaml
         
+        # 4. 최종 리소스 적용
         kubectl --server=https://127.0.0.1:6443 --insecure-skip-tls-verify \
-        apply --server-side --force-conflicts -f custom-resources.yaml
+        apply --server-side --force-conflicts -f /tmp/custom-resources.yaml
+      args:
+        executable: /bin/bash
   when: inventory_hostname == groups['masters'][0]
   become: false

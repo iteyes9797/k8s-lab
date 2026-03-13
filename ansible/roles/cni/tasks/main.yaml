@@ -13,6 +13,7 @@
 
 - name: CNI - Calico 적용
   ansible.builtin.shell: |
+    # root 권한으로 admin.conf를 참조하여 실행
     kubectl apply -f /tmp/calico.yaml --kubeconfig=/etc/kubernetes/admin.conf
   when: inventory_hostname == groups['masters'][0]
   become: true
