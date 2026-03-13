@@ -236,7 +236,9 @@ spec:
         args:
           - "--context=/work"
           - "--dockerfile=/work/Dockerfile.runtime"
-          - "--destination=docker.io/{{workflow.parameters.image}}:{{workflow.parameters.tag}}"
+          # - "--destination=docker.io/{{workflow.parameters.image}}:{{workflow.parameters.tag}}"
+          # 수정 (Harbor IP 사용)
+          - --destination={{workflow.parameters.image_repo}}:{{inputs.parameters.tag}}
           - "--build-arg=NGINX_BASE={{workflow.parameters.nginx_base_image}}"
           - "--build-arg=JRE_BASE={{workflow.parameters.jre_base_image}}"
           - "--verbosity=info"
