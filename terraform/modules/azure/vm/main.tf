@@ -49,7 +49,8 @@ resource "azurerm_linux_virtual_machine" "vm" {
 
   os_disk {
     caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
+    storage_account_type = "Premium_LRS" # Standard_LRS에서 변경
+    disk_size_gb         = 100            # 용량 추가 (기본 30GB는 K8s에 좁을 수 있음)
   }
 
   source_image_reference {

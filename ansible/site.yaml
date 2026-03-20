@@ -55,11 +55,11 @@
     - role: nfs_server
       tags: [nfs]
 
-# 6) MetalLB 설정
-- name: 로드밸런서 서비스(MetalLB) 구성
-  hosts: masters[0]
-  gather_facts: true
-  become: true
-  roles:
-    - role: metallb
-      tags: [metallb] 
+# # 6) MetalLB 설정
+# - name: 로드밸런서 서비스(MetalLB) 구성
+#   hosts: masters[0]
+#   gather_facts: true
+#   become: true
+#   roles:
+#     - role: metallb
+#       tags: [metallb] 

@@ -1,5 +1,5 @@
 Host bastion
-    HostName 20.196.198.189
+    HostName 20.196.193.205
     User azureuser
     IdentityFile ~/.ssh/id_rsa
     StrictHostKeyChecking no

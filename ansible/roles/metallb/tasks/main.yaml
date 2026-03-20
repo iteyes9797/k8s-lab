@@ -1,26 +1,26 @@
----
-# 1. MetalLB 네이티브 매니페스트 설치
-- name: MetalLB - 커스텀 리소스 및 컨트롤러 배포
-  kubernetes.core.k8s:
-    src: https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
-    state: present
+# ---
+# # 1. MetalLB 네이티브 매니페스트 설치
+# - name: MetalLB - 커스텀 리소스 및 컨트롤러 배포
+#   kubernetes.core.k8s:
+#     src: https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+#     state: present
 
-# 2. Webhook 및 Controller 파드가 뜰 때까지 대기 (설정 적용 전 필수 단계)
-- name: MetalLB - 컨트롤러 파드 준비 대기
-  kubernetes.core.k8s_info:
-    kind: Pod
-    namespace: metallb-system
-    label_selectors:
-      - component=controller
-  register: metallb_controller
-  until: 
-    - metallb_controller.resources | length > 0
-    - metallb_controller.resources[0].status.phase == "Running"
-  retries: 15
-  delay: 10
+# # 2. Webhook 및 Controller 파드가 뜰 때까지 대기 (설정 적용 전 필수 단계)
+# - name: MetalLB - 컨트롤러 파드 준비 대기
+#   kubernetes.core.k8s_info:
+#     kind: Pod
+#     namespace: metallb-system
+#     label_selectors:
+#       - component=controller
+#   register: metallb_controller
+#   until: 
+#     - metallb_controller.resources | length > 0
+#     - metallb_controller.resources[0].status.phase == "Running"
+#   retries: 15
+#   delay: 10
 
-# 3. IP 주소 풀 및 L2 광고 설정 배포 (템플릿 활용)
-- name: MetalLB - IPAddressPool 및 L2Advertisement 설정 적용
-  kubernetes.core.k8s:
-    definition: "{{ lookup('template', 'metallb-config.yaml.j2') }}"
-    state: present
+# # 3. IP 주소 풀 및 L2 광고 설정 배포 (템플릿 활용)
+# - name: MetalLB - IPAddressPool 및 L2Advertisement 설정 적용
+#   kubernetes.core.k8s:
+#     definition: "{{ lookup('template', 'metallb-config.yaml.j2') }}"
+#     state: present

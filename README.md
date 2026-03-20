@@ -137,6 +137,10 @@ rm -rf ~/k8s-lab && mkdir -p ~/k8s-lab
 # 3. 파일 복사 및 이동
 cp -rv "$TARGET_PATH/." ~/k8s-lab/
 cd ~/k8s-lab
+chmod -R 755 .
+
+# 4. VS Code로 해당 위치 열기
+code .
 ```
 
 방법 B: 심볼릭 링크 연결 (윈도우-WSL 실시간 공유)

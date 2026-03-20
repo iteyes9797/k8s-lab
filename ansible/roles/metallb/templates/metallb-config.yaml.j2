@@ -1,17 +1,17 @@
-apiVersion: metallb.io/v1beta1
-kind: IPAddressPool
-metadata:
-  name: ip-pool
-  namespace: metallb-system
-spec:
-  addresses:
-  - {{ nfs_network_cidr | regex_replace('\.0/24$', '.200') }}-{{ nfs_network_cidr | regex_replace('\.0/24$', '.250') }}
----
-apiVersion: metallb.io/v1beta1
-kind: L2Advertisement
-metadata:
-  name: l2-adv
-  namespace: metallb-system
-spec:
-  ipAddressPools:
-  - ip-pool
+# apiVersion: metallb.io/v1beta1
+# kind: IPAddressPool
+# metadata:
+#   name: ip-pool
+#   namespace: metallb-system
+# spec:
+#   addresses:
+#   - {{ nfs_network_cidr | regex_replace('\.0/24$', '.200') }}-{{ nfs_network_cidr | regex_replace('\.0/24$', '.250') }}
+# ---
+# apiVersion: metallb.io/v1beta1
+# kind: L2Advertisement
+# metadata:
+#   name: l2-adv
+#   namespace: metallb-system
+# spec:
+#   ipAddressPools:
+#   - ip-pool

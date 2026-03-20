@@ -9,7 +9,7 @@ module "network" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
   vnet_cidr           = var.vnet_cidr
-  public_subnet_cidr  = "10.0.2.0/24"  
+  public_subnet_cidr  = "10.0.1.0/24"  
   private_subnet_cidr = "10.0.2.0/24"  
 }
 
@@ -71,4 +71,27 @@ resource "local_file" "ssh_config" {
     lb         = lookup(module.vm.internal_ips, "lb", "")
   })
   filename = "${path.module}/../../ssh_config"
+}
+
+# 3. 로드밸런서 모듈 호출
+module "loadbalancer" {
+  source = "../../modules/azure/loadbalancer"
+
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = var.location
+}
+
+# 4. 워커 노드들을 로드밸런서 백엔드 풀에 연결 (연결 고리)
+resource "azurerm_network_interface_backend_address_pool_association" "k8s_workers" {
+  # var.nodes 맵에서 키 이름에 "worker"가 포함된 노드만 골라냅니다.
+  for_each = { for k, v in var.nodes : k => v if length(regexall("worker", k)) > 0 }
+
+  network_interface_id    = module.vm.nic_ids[each.key]
+  ip_configuration_name   = "internal" # modules/azure/vm/main.tf 내 ip_configuration 이름
+  backend_address_pool_id = module.loadbalancer.backend_pool_id
+}
+
+# 5. 로드밸런서 공인 IP 출력
+output "load_balancer_public_ip" {
+  value = module.loadbalancer.public_ip
 }

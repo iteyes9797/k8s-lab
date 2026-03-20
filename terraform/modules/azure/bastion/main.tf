@@ -31,7 +31,7 @@ resource "azurerm_linux_virtual_machine" "bastion" {
   name                = "bastion-host"
   location            = var.location
   resource_group_name = var.resource_group_name
-  size                = "Standard_D2s_v3"
+  size                = "Standard_D2s_v3" # Bastion은 너무 작은 B1s보다 D2s_v3로 안정성 확보
   admin_username      = var.admin_username
   tags = {
     "project"     = "k8s-automation-lab"
@@ -50,7 +50,7 @@ resource "azurerm_linux_virtual_machine" "bastion" {
 
   os_disk {
     caching              = "ReadWrite"
-    storage_account_type = "Standard_LRS"
+    storage_account_type = "Premium_LRS"
   }
 
   source_image_reference {

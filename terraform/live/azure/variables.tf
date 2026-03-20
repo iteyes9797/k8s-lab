@@ -1,32 +1,7 @@
-# variable "location" {
-#   description = "The Azure Region in which all resources in this example should be created."
-#   default     = "Korea Central"
-# }
-
-# variable "resource_group_name" {
-#   description = "The name of the Resource Group in which all resources in this example should be created."
-#   default     = "k8s-lab-rg"
-# }
-
-# variable "admin_username" {
-#   description = "The user name to use for the VMs"
-#   default     = "azureuser"
-# }
-
-# variable "admin_password" {
-#   description = "The password to use for the VMs"
-#   default     = "P@ssw0rd1234!"
-# }
-
-# variable "ssh_public_key_path" {
-#   description = "Path to SSH public key used for VM provisioning"
-#   default     = "~/.ssh/id_rsa.pub"
-# }
-
 variable "resource_group_name" {
   type        = string
   description = "리소스가 생성될 Azure 리소스 그룹의 이름입니다."
-  default     = "k8s-lab-db-rg"
+  default     = "ite-k8s-rg"
 }
 
 variable "location" {
@@ -41,27 +16,42 @@ variable "vnet_cidr" {
   default     = "10.0.0.0/16"
 }
 
+# Public Subnet (Bastion 전용)
+variable "public_subnet_cidr" {
+  type        = string
+  description = "Bastion 호스트가 배치될 외부 노출용 서브넷 대역입니다."
+  default     = "10.0.1.0/24"
+}
+
+# Private Subnet (K8s 노드 전용)
 variable "subnet_cidr" {
   type        = string
   description = "K8s 노드들이 배치될 사설 서브넷의 기본 CIDR입니다."
   default     = "10.0.2.0/24"
 }
 
+variable "admin_username" {
+  type        = string
+  description = "VM에 접속할 관리자 계정 이름입니다."
+  default     = "azureuser"
+}
+
 variable "ssh_public_key" {
   type        = string
-  description = "VM 관리자 계정 인증에 사용할 로컬 SSH 공개키 파일의 경로입니다."
+  description = "RSA 공개키 파일의 경로입니다." 
   default     = "~/.ssh/id_rsa.pub"
 }
 
 variable "nodes" {
   type        = map(string)
-  description = "Kubernetes 클러스터 노드의 이름과 각각의 VM 인스턴스 크기(SKU) 정의입니다."
+  description = "노드별 VM 인스턴스 크기 정의"
   default = {
+    # bastion = "Standard_B1s"        # 가장 작은 단위 (1 vCPU, 1GB RAM - 비용 절감)
     master1 = "Standard_D2s_v3"
     master2 = "Standard_D2s_v3"
     master3 = "Standard_D2s_v3"
-    worker1 = "Standard_D2s_v3"
-    worker2 = "Standard_D2s_v3"
+    worker1 = "Standard_D4s_v3"     # D2s보다 높은 D4s_v3 (4 vCPU, 16GB RAM)
+    worker2 = "Standard_D4s_v3"     # Worker 성능 대폭 강화
     nfs     = "Standard_D2s_v3"
     lb      = "Standard_D2s_v3"
   }
@@ -69,9 +59,10 @@ variable "nodes" {
 
 variable "node_ips" {
   type        = map(string)
-  description = "Private Subnet(10.0.2.0/24) 내에 고정 할당할 사설 IP 주소 매핑 정보입니다."
+  description = "고정 IP 할당 정보"
   default = {
-    master1 = "10.0.2.10"
+    # bastion = "10.0.1.10"           # Public 대역
+    master1 = "10.0.2.10"           # 이하 Private 대역
     master2 = "10.0.2.11"
     master3 = "10.0.2.12"
     worker1 = "10.0.2.21"

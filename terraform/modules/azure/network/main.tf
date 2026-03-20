@@ -91,3 +91,21 @@ resource "azurerm_subnet_network_security_group_association" "private_assoc" {
   subnet_id                 = azurerm_subnet.private.id
   network_security_group_id = azurerm_network_security_group.private_nsg.id
 }
+
+resource "azurerm_network_security_rule" "allow_lb_to_nodeport" {
+  name                        = "AllowLBToK8sNodePort"
+  priority                    = 150 
+  direction                   = "Inbound"
+  access                      = "Allow"
+  protocol                    = "Tcp"
+  source_port_range           = "*"
+  
+  source_address_prefix       = "AzureLoadBalancer" 
+  
+  # 목적지: Ingress-Nginx가 사용하는 NodePort 범위
+  destination_port_ranges     = ["30080", "30443"] 
+  destination_address_prefix  = "*"
+  
+  resource_group_name         = var.resource_group_name
+  network_security_group_name = azurerm_network_security_group.private_nsg.name
+}
