@@ -8,7 +8,7 @@ resource "azurerm_public_ip" "bastion_pip" {
   name                = "bastion-pip"
   location            = var.location
   resource_group_name = var.resource_group_name
-  allocation_method   = "Static" # IP가 바뀌지 않도록 Static 설정
+  allocation_method   = "Static"
   sku                 = "Standard"  
 }
 
@@ -45,7 +45,7 @@ resource "azurerm_linux_virtual_machine" "bastion" {
 
   admin_ssh_key {
     username   = var.admin_username
-    public_key = var.ssh_public_key
+    public_key = file(var.ssh_public_key)
   }
 
   os_disk {

@@ -99,91 +99,82 @@ WSL 내부 경로를 자동 인식합니다.
 
 # 3. Quick Start
 
-## 3.1 WSL2 활성화
+## Step 0: [선택 사항] 환경 초기화 및 최적화
+만약 기존 WSL 환경이 꼬여서 재설치했거나, **방법 B(심볼릭 링크)**를 사용할 계획이라면 아래 설정을 먼저 수행하세요.
 
-Windows 환경에서 실행 시 먼저 WSL2를 활성화합니다.
+# 1. WSL 권한 설정 (방법 B 필수): 윈도우 드라이브에서도 리눅스 권한이 작동하도록 설정합니다.
+```bash
+# WSL 터미널에서 실행
+sudo tee /etc/wsl.conf << 'EOF'
+[automount]
+options = "metadata"
+EOF
 
-PowerShell(관리자)
+# 2. WSL 재시작: 
+# Windows PowerShell에서 실행
+wsl --shutdown
 
-    wsl --install
-
-설치 후 **PC 재부팅 필수**
-
+# 3. 환경 초기화 (최후의 수단):
+wsl --unregister Ubuntu
+wsl --install -d Ubuntu
+```
 ------------------------------------------------------------------------
 
-## 3.2 프로젝트 환경 구축
+## Step 1: 프로젝트 환경 구축 및 연결
 
-WSL 내부 경로에서 실행해야 권한 문제가 발생하지 않습니다.
+VS Code 하단 터미널 우측 상단의 **화살표(∨)**를 클릭하여 **[Ubuntu (WSL)]**을 선택하세요. (목록에 없다면 터미널에 wsl 입력)
 
-### Step1 프로젝트 복사 및 환경 연결
-WSL 환경에서 파일을 관리하는 두 가지 방법 중 하나를 선택하세요.
-
-방법 A: 프로젝트 복사 (안전한 격리 환경)
-윈도우 드라이브와 완전히 분리된 WSL 내부 저장소에 파일을 복사합니다.
+방법 A: 프로젝트 복사 (가장 추천: 안전한 격리 환경)
+윈도우 드라이브와 완전히 분리된 WSL 내부 저장소에 파일을 복사합니다. 속도가 가장 빠르고 권한 문제가 없습니다.
 
 ``` bash
-# 1. 현재 윈도우 위치 정보를 동적으로 가져오기
+# 1. 현재 위치 정보를 변수에 담기
 TARGET_PATH=$(pwd)
 
-# 2. 기존 폴더 삭제 및 재생성
+# 2. 기존 폴더 삭제 및 WSL 홈에 재생성
 rm -rf ~/k8s-lab && mkdir -p ~/k8s-lab
 
-# 3. 현재 위치의 파일들을 WSL 홈으로 복사
-# (변수를 반드시 큰따옴표로 감싸서 공백 문제를 방지합니다)
+# 3. 파일 복사 및 이동
 cp -rv "$TARGET_PATH/." ~/k8s-lab/
-
-# 4. 이동 및 확인
-cd ~/k8s-lab && ls
+cd ~/k8s-lab
 ```
 
-방법 B: 심볼릭 링크 연결 (윈도우-WSL 실시간 동기화)
-윈도우에서 수정하면 WSL에 즉시 반영되길 원할 때 사용합니다. (권장)
+방법 B: 심볼릭 링크 연결 (윈도우-WSL 실시간 공유)
+윈도우 폴더를 리눅스에 연결합니다. 윈도우 탐색기 사용이 편하지만 권한 설정 시 주의가 필요합니다.
+수정 사항이 실시간 반영되지만, 반드시 Step 0의 metadata 설정이 완료되어야 합니다.
 
 ``` bash
-# 1. 현재 윈도우 위치 정보를 동적으로 가져오기
-TARGET_PATH=$(pwd)
-
-# 2. 기존 폴더 삭제 및 재생성
-rm -rf ~/k8s-lab && mkdir -p ~/k8s-lab
-
-# 3. 기존 폴더/링크 삭제 후 심볼릭 링크 생성
+# 1. 기존 폴더/링크 삭제 후 심볼릭 링크 생성
 rm -rf ~/k8s-lab
-ln -s "$TARGET_PATH" ~/k8s-lab
+ln -s "$(pwd)" ~/k8s-lab
 
-# 4. 이동 및 확인
-cd ~/k8s-lab && ls -ld ~/k8s-lab
+# 2. 이동 및 확인
+cd ~/k8s-lab
 ```
+
+[!IMPORTANT]
+VS Code 하단 바가 **초록색 [WSL: Ubuntu]**로 표시되는지 확인하세요. 
+이제 VS Code에서 파일을 수정하고 Ctrl+S를 누르면, 아래 터미널에서 즉시 업데이트된 파일로 run.sh를 실행할 수 있습니다.
 
 ------------------------------------------------------------------------
 
-### Step2 권한 초기화
+## Step 2: 필수 패키지 설치
+run.sh 실행에 필요한 도구들을 한 번에 설치합니다.
+프로젝트 구동 전, 전체 파일의 권한을 정리하고 Ansible Vault 비밀번호를 설정합니다.
 
 ``` bash
-# 모든 파일의 실행 권한을 먼저 제거 (보안 및 에러 방지)
-find . -type f -exec chmod 644 {} +
-
-# 필요한 스크립트만 실행 권한 부여
-chmod +x run.sh
-
-# Vault 패스워드 파일은 반드시 실행 권한이 없어야 함 (중요)
-chmod 600 .vault_pass
-```
-> **Tip**: 심볼릭 링크 사용 시 `.vault_pass` 권한 에러(Exec format error)가 발생한다면, 해당 파일만 WSL 로컬 경로로 복사하여 `600` 권한을 부여한 뒤 다시 링크를 걸어주어야 합니다.
-
-------------------------------------------------------------------------
-
-## 3.3 필수 패키지 설치
-
-``` bash
-# 로컬 패키지 인덱스를 최신 상태로 업데이트
-sudo apt update
-
-# git: 소스 코드 버전 관리
-# python3-pip: 파이썬 기반 도구(Ansible 등) 관리
-# unzip: 테라폼 등 압축 파일 해제
-# curl: 웹 서버로부터 데이터 전송 (설치 스크립트 다운로드용)
-# jq: JSON 형식의 데이터를 커맨드라인에서 처리/가공
-sudo apt install -y git python3-pip unzip curl jq
+# 1. 로컬 패키지 저장소 정보를 최신 상태로 업데이트 및 핵심 유틸리티 한꺼번에 설치
+# git: 소스 코드 버전 관리 및 레포지토리 관리
+# python3-pip: Ansible 등 파이썬 기반 자동화 도구 설치 및 관리
+# unzip: Terraform 바이너리 등 압축 파일 해제
+# curl: 외부 서버(Azure, HashiCorp 등)에서 설치 스크립트 및 키 다운로드
+# jq: 리눅스 커맨드라인에서 JSON 데이터(Terraform Output 등) 필터링 및 가공
+# gnupg: 외부 레포지토리의 보안 서명(GPG Key)을 검증하고 관리
+# software-properties-common: 추가 소프트웨어 저장소(PPA)를 안전하게 관리
+# dos2unix: 윈도우에서 작성된 파일의 줄 바꿈(^M)을 리눅스 형식(LF)으로 강제 변환
+# nfs-common: 쿠버네티스 노드들이 NFS 서버에 접속하기 위해 반드시 필요한 라이브러리
+# nfs-kernel-server는 원격 서버용
+sudo apt update && sudo apt install -y git python3-pip unzip curl jq dos2unix nfs-common nfs-kernel-server
 ```
 
 ### Azure CLI
@@ -215,14 +206,16 @@ sudo apt update && sudo apt install -y terraform
 ### Ansible 
 
 ``` bash
-# 1. 최신 패키지 정보를 다시 확인
-sudo apt update
+# 최신 패키지 정보를 반영하여 앤서블 핵심 패키지 설치
+sudo apt update && sudo apt install -y ansible
+```
+### kubectl 설치 
 
-# 2. 앤서블 핵심 패키지 및 관련 파이썬 의존성 한 번에 설치
-sudo apt install -y ansible
-
-# 3. 설치 완료 확인
-ansible --version
+``` bash
+sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+sudo apt-get update && sudo apt-get install -y kubectl
 ```
 
 ### Helm
@@ -247,11 +240,30 @@ rm argocd-linux-amd64
 
 ### 기존 환경설정 파일 삭제 및 초기화
 
-# 윈도우에서 복사해온 뒤, 꼬인 권한과 OS가 다른 바이너리들을 싹 정리
+``` bash
+# 윈도우에서 복사해온 뒤, 꼬인 권한과 OS가 다른 바이너리 정리
 rm -rf .terraform .terraform.lock.hcl
+```
+------------------------------------------------------------------------
 
-# 현재 WSL(리눅스) 환경에 맞는 깨끗한 파일을 새로 다운로드
-terraform init
+## Step 3: 권한 초기화
+
+``` bash
+# 1. 줄바꿈 LF로 통일 (윈도우 환경에서 필수)
+find . -type f -not -path '*/.*' -exec dos2unix {} +
+
+# 2. 파일 권한 기본 설정
+find . -type f -not -path '*/.*' -exec chmod 644 {} +
+
+# 3. 비밀번호 파일 생성 (우리가 아까 run.sh에 넣은 로직과 중복되지만, 미리 해두면 더 안전합니다)
+# 만약 이미 .vault_pass를 만드셨다면 이 단계는 넘어가도 됩니다.
+cp .vault_pass.template .vault_pass
+read -p "Enter Ansible Vault Password: " pw && echo "$pw" > .vault_pass && unset pw
+
+# 4. 보안 및 실행 권한 부여
+chmod 600 .vault_pass
+chmod +x run.sh
+```
 
 ------------------------------------------------------------------------
 

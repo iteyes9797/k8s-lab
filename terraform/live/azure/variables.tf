@@ -43,8 +43,8 @@ variable "vnet_cidr" {
 
 variable "subnet_cidr" {
   type        = string
-  description = "VM들이 배치될 서브넷(Subnet)의 IP 주소 대역입니다."
-  default     = "10.0.1.0/24"
+  description = "K8s 노드들이 배치될 사설 서브넷의 기본 CIDR입니다."
+  default     = "10.0.2.0/24"
 }
 
 variable "ssh_public_key" {
@@ -69,14 +69,14 @@ variable "nodes" {
 
 variable "node_ips" {
   type        = map(string)
-  description = "Ansible 및 클러스터 설정의 정합성을 위해 각 노드에 고정 할당할 사설 IP 주소 매핑 정보입니다."
+  description = "Private Subnet(10.0.2.0/24) 내에 고정 할당할 사설 IP 주소 매핑 정보입니다."
   default = {
-    master1 = "10.0.1.10"
-    master2 = "10.0.1.11"
-    master3 = "10.0.1.12"
-    worker1 = "10.0.1.21"
-    worker2 = "10.0.1.22"
-    nfs     = "10.0.1.30"
-    lb      = "10.0.1.110"
+    master1 = "10.0.2.10"
+    master2 = "10.0.2.11"
+    master3 = "10.0.2.12"
+    worker1 = "10.0.2.21"
+    worker2 = "10.0.2.22"
+    nfs     = "10.0.2.30"
+    lb      = "10.0.2.110"
   }
 }

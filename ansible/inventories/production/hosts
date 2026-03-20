@@ -3,19 +3,18 @@ ansible_user=azureuser
 ansible_ssh_private_key_file=~/.ssh/id_rsa
 ansible_python_interpreter=/usr/bin/python3
 ansible_host_key_checking=False
-ansible_ssh_common_args='-o ProxyCommand="ssh -W %h:%p -q azureuser@20.194.40.77 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"'
 
 [masters]
-k8s-master01 ansible_host=10.0.1.10
-k8s-master02 ansible_host=10.0.1.11
-k8s-master03 ansible_host=10.0.1.12
+k8s-master01 ansible_host=10.0.2.10
+k8s-master02 ansible_host=10.0.2.11
+k8s-master03 ansible_host=10.0.2.12
 
 [workers]
-k8s-worker01 ansible_host=10.0.1.21
-k8s-worker02 ansible_host=10.0.1.22
+k8s-worker01 ansible_host=10.0.2.21
+k8s-worker02 ansible_host=10.0.2.22
 
 [lb]
-k8s-lb01 ansible_host=10.0.1.110
+k8s-lb01 ansible_host=10.0.2.110
 
 [nfs]
-k8s-nfs01 ansible_host=10.0.1.30
+k8s-nfs01 ansible_host=10.0.2.30

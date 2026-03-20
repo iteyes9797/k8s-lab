@@ -13,7 +13,14 @@ variable "vnet_cidr" {
   description = "가상 네트워크(VNet)의 전체 IP 주소 공간입니다. (기본값: 10.0.0.0/16)"
 }
 
-variable "subnet_cidr" {
+variable "public_subnet_cidr" {
   type        = string
-  description = "VM들이 배치될 서브넷의 IP 주소 공간입니다. (기본값: 10.0.1.0/24)"
+  description = "Bastion 호스트가 위치할 Public 서브넷의 CIDR입니다."
+  default     = "10.0.2.0/24"
+}
+
+variable "private_subnet_cidr" {
+  type        = string
+  description = "K8s 노드들이 위치할 Private 서브넷의 CIDR입니다."
+  default     = "10.0.2.0/24"
 }

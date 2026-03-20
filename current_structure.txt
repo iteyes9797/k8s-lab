@@ -1,0 +1,255 @@
+폴더 PATH의 목록입니다.
+볼륨 일련 번호는 0000-0000입니다.
+\\wsl.localhost\Ubuntu.
+│  .vault_pass
+│  README.md
+│  current_structure.txt
+│  .vault_pass.template
+│  ARCHITECTURE_REVIEW.md
+│  run.sh
+│  TROUBLE_SHOOTING.md
+│  .gitignore
+│  README_OLD.md
+│  CONTRIBUTING.md
+│  
+├─terraform
+│  │  inventory.ini
+│  │  inventory.tpl
+│  │  
+│  ├─modules
+│  │  └─azure
+│  │      ├─vm
+│  │      │      outputs.tf
+│  │      │      variables.tf
+│  │      │      main.tf
+│  │      │      
+│  │      ├─network
+│  │      │      outputs.tf
+│  │      │      variables.tf
+│  │      │      main.tf
+│  │      │      
+│  │      └─bastion
+│  │              outputs.tf
+│  │              variables.tf
+│  │              main.tf
+│  │              
+│  └─live
+│      └─azure
+│          │  provider.tf
+│          │  terraform.tfstate.backup
+│          │  outputs.tf
+│          │  variables.tf
+│          │  main.tf
+│          │  terraform.tfstate
+│          │  .terraform.lock.hcl
+│          │  
+│          └─.terraform
+│              ├─modules
+│              │      modules.json
+│              │      
+│              └─providers
+│                  └─registry.terraform.io
+│                      └─hashicorp
+│                          ├─http
+│                          │  └─3.5.0
+│                          │      └─linux_amd64
+│                          │              LICENSE.txt
+│                          │              terraform-provider-http_v3.5.0_x5
+│                          │              
+│                          ├─azurerm
+│                          │  └─3.117.1
+│                          │      └─linux_amd64
+│                          │              LICENSE.txt
+│                          │              terraform-provider-azurerm_v3.117.1_x5
+│                          │              
+│                          └─local
+│                              └─2.7.0
+│                                  └─linux_amd64
+│                                          LICENSE.txt
+│                                          terraform-provider-local_v2.7.0_x5
+│                                          
+├─helm
+│      mariadb-values.yaml
+│      argo-workflow설치결과.txt
+│      mariadb설치결과.txt
+│      cert-manager설치결과.txt
+│      README.md
+│      argocd-values.yaml
+│      helm레포정리.md
+│      ingress-nginx설치결과.txt
+│      ingress-nginx-values.yaml
+│      argo-cd설치결과.txt
+│      argo-workflows-values.yaml
+│      nfs-values.yaml
+│      cert-manager-values.yaml
+│      
+├─.git
+│  │  config
+│  │  index
+│  │  packed-refs
+│  │  description
+│  │  HEAD
+│  │  
+│  ├─refs
+│  │  ├─tags
+│  │  ├─remotes
+│  │  │  └─origin
+│  │  │          HEAD
+│  │  │          
+│  │  └─heads
+│  │          main
+│  │          
+│  ├─objects
+│  │  ├─pack
+│  │  │      pack-45eb6dfabce8dd25be965e079139a4e27b817e15.pack
+│  │  │      pack-45eb6dfabce8dd25be965e079139a4e27b817e15.idx
+│  │  │      
+│  │  └─info
+│  ├─hooks
+│  │      pre-applypatch.sample
+│  │      pre-push.sample
+│  │      pre-receive.sample
+│  │      pre-commit.sample
+│  │      commit-msg.sample
+│  │      update.sample
+│  │      applypatch-msg.sample
+│  │      fsmonitor-watchman.sample
+│  │      pre-merge-commit.sample
+│  │      push-to-checkout.sample
+│  │      post-update.sample
+│  │      prepare-commit-msg.sample
+│  │      pre-rebase.sample
+│  │      
+│  ├─logs
+│  │  │  HEAD
+│  │  │  
+│  │  └─refs
+│  │      ├─remotes
+│  │      │  └─origin
+│  │      │          HEAD
+│  │      │          
+│  │      └─heads
+│  │              main
+│  │              
+│  └─info
+│          exclude
+│          
+├─dockerfiles
+│      node-dockerfile
+│      nginx-dockerfile
+│      devcontainer.dockerfile
+│      nginx.conf
+│      jre-dockerfile
+│      README.md
+│      jdk-dockerfile
+│      
+├─azure
+│  │  provider.tf
+│  │  storage.tf
+│  │  network.tf
+│  │  README.md
+│  │  compute.tf
+│  │  SSH Key 사용 용도 비교.md
+│  │  outputs.tf
+│  │  variables_vms.tf
+│  │  variables.tf
+│  │  .terraform.lock.hcl
+│  │  
+│  └─minimal-vm
+│          provider.tf
+│          README.md
+│          outputs.tf
+│          variables.tf
+│          terraform.tfvars.template
+│          main.tf
+│          terraform.tfvars
+│          .terraform.lock.hcl
+│          
+├─ansible
+│  │  ansible.cfg
+│  │  site.yaml
+│  │  
+│  ├─group_vars
+│  │      all.yaml
+│  │      
+│  ├─inventories
+│  │  └─production
+│  │          hosts
+│  │          
+│  └─roles
+│      ├─common
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─worker
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─lb
+│      │  ├─templates
+│      │  │      haproxy.cfg.j2
+│      │  │      
+│      │  ├─handlers
+│      │  │      main.yaml
+│      │  │      
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─cni
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─container_runtime
+│      │  ├─templates
+│      │  │      crio.repo.j2
+│      │  │      
+│      │  ├─handlers
+│      │  │      main.yaml
+│      │  │      
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─master
+│      │  ├─templates
+│      │  │      kubeadm-config.yaml.j2
+│      │  │      
+│      │  ├─handlers
+│      │  │      main.yaml
+│      │  │      
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      ├─k8s_reset
+│      │  └─tasks
+│      │          main.yaml
+│      │          
+│      └─nfs_server
+│          ├─templates
+│          │      exports.j2
+│          │      
+│          ├─handlers
+│          │      main.yaml
+│          │      
+│          └─tasks
+│                  main.yaml
+│                  
+├─k8s_configs
+│      admin.conf
+│      kubeadm-config.yaml
+│      
+├─.vscode
+│      settings.json
+│      
+└─argoCd
+        argo-workflow-ci-ver2.yaml
+        argo-rbac.yaml
+        dockerhub-creds.yaml
+        main-app.yaml
+        coredns.yaml
+        dev-vm-ver2.yaml
+        Dockerfile
+        dev-vm.yaml
+        note.txt
+        argo-workflow-ci-ver3.yaml
+        ci-kaniko-workflowtemplate.yaml
+        

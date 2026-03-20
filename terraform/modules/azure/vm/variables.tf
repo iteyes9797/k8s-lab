@@ -27,3 +27,9 @@ variable "node_ips" {
   type        = map(string)
   description = "각 노드에 고정(Static) 할당할 사설 IP 주소 맵입니다."
 }
+
+variable "assign_public_ip" {
+  type        = bool
+  default     = false
+  description = "노드에 공인 IP를 할당할지 여부를 결정합니다."
+}

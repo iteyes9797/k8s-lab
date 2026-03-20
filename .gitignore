@@ -27,7 +27,8 @@
 crash.log
 
 # --- Ansible 관련 ---
-# Ansible Vault 비밀번호 파일 (절대 업로드 금지)
+# Ansible Vault 비밀번호 파일 (절대 업로드 금지) 
+# -> 초기 세팅 시, 필요한 경우 '.vault_pass.template' 파일을 만들어서 올리고, 실제 비밀번호는 '.vault_pass' 파일에 저장하여 사용하도록 안내
 .vault_pass
 
 # Ansible Retry 파일 (실행 실패 시 생성됨)

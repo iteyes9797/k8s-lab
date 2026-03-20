@@ -5,19 +5,58 @@
     mode: "0644"
   when: inventory_hostname == groups['masters'][0]
 
-- name: CNI - Calico Pod CIDR 자동 치환
+- name: CNI - Calico Pod CIDR 및 MTU 자동 치환
   ansible.builtin.shell: |
+    # 1. Pod CIDR 치환
     sed -i 's@192.168.0.0/16@{{ pod_network_cidr }}@g' /tmp/calico.yaml
+    
+    # 2. Azure 환경을 위한 MTU 1400 설정 강제 삽입
+    # CALICO_IPV4POOL_IPIP 설정 바로 아래에 FELIX_IPINIPMTU 설정을 추가합니다.
+    if ! grep -q "FELIX_IPINIPMTU" /tmp/calico.yaml; then
+      sed -i '/name: CALICO_IPV4POOL_IPIP/a \            - name: FELIX_IPINIPMTU\n              value: "1400"' /tmp/calico.yaml
+    fi
   when: inventory_hostname == groups['masters'][0]
   become: true
 
 - name: CNI - Calico 적용
   ansible.builtin.shell: |
-    # root 권한으로 admin.conf를 참조하여 실행
-    kubectl apply -f /tmp/calico.yaml --kubeconfig=/etc/kubernetes/admin.conf
+    until kubectl --kubeconfig=/etc/kubernetes/admin.conf --insecure-skip-tls-verify get nodes; do
+      sleep 5
+    done
+
+    kubectl apply -f /tmp/calico.yaml \
+      --kubeconfig=/etc/kubernetes/admin.conf \
+      --validate=false \
+      --insecure-skip-tls-verify
   when: inventory_hostname == groups['masters'][0]
   become: true
   register: cni_result
-  until: cni_result.rc == 0
-  retries: 5
+  failed_when: false 
+
+- name: CNI - 노드 상태 확인 대기 (마스터가 Ready 될 때까지만)
+  ansible.builtin.shell: |
+    kubectl get nodes --kubeconfig=/etc/kubernetes/admin.conf --insecure-skip-tls-verify | grep "{{ inventory_hostname }}"
+  register: node_status
+  until: "' Ready' in node_status.stdout"
+  retries: 20
   delay: 10
+  when: inventory_hostname == groups['masters'][0]
+  become: true
+
+- name: CNI - 마스터 서비스 재시작
+  ansible.builtin.shell: "systemctl restart crio kubelet"
+  when: inventory_hostname in groups['masters']
+  become: true
+
+- name: CNI - 최종 노드 상태 출력
+  ansible.builtin.command: "kubectl --kubeconfig=/etc/kubernetes/admin.conf get nodes"
+  register: final_nodes
+  when: inventory_hostname == groups['masters'][0]
+  ignore_errors: true
+
+- name: CNI - 클러스터 상태 확인 결과
+  ansible.builtin.debug:
+    var: final_nodes.stdout_lines
+  when: 
+    - inventory_hostname == groups['masters'][0]
+    - final_nodes.rc == 0

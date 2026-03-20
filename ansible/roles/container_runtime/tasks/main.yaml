@@ -1,86 +1,111 @@
 ---
-# CRI-O 컨테이너 런타임 설치/설정 role
+# ==========================================================
+# 1. 쿠버네티스 공통 패키지 설치 (CRI-O 설정보다 무조건 먼저 실행)
+# ==========================================================
+- name: 런타임 - K8s 설치용 사전 패키지 설치
+  ansible.builtin.apt:
+    name: [ 'apt-transport-https', 'ca-certificates', 'curl', 'gpg' ]
+    state: present
+    update_cache: yes
+  become: true
 
-# 0. 이 노드에서 CRI-O를 사용하지 않으면 스킵
-- name: 런타임 - 이 호스트는 CRI-O 대상이 아님 (container_runtime != 'crio')
+- name: 런타임 - K8s APT 키링 디렉토리 생성
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: 런타임 - K8s 공식 GPG 키 다운로드
+  ansible.builtin.get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key
+    dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    mode: '0644'
+    force: yes
+  become: true
+
+- name: 런타임 - K8s APT 레포지토리 추가
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /"
+    state: present
+    filename: kubernetes
+  become: true
+
+- name: 런타임 - kubeadm, kubelet, kubectl 패키지 설치
+  ansible.builtin.apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes
+  become: true
+
+- name: 런타임 - K8s 패키지 버전 고정
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: [ 'kubelet', 'kubeadm', 'kubectl' ]
+
+# ==========================================================
+# 2. CRI-O 컨테이너 런타임 설정 (여기서부터 조건부 종료 적용)
+# ==========================================================
+- name: 런타임 - 이 호스트는 CRI-O 대상이 아님
   ansible.builtin.meta: end_host
   when: container_runtime != "crio"
 
-# 1. CRI-O 필요 커널 모듈 설정 (overlay, br_netfilter)
-- name: 런타임 - CRI-O용 커널 모듈 설정 파일 생성
+- name: 런타임 - 커널 모듈 설정 파일 생성
   ansible.builtin.copy:
     dest: /etc/modules-load.d/crio.conf
     content: |
       overlay
       br_netfilter
-    owner: root
-    group: root
     mode: "0644"
   become: true
 
-- name: 런타임 - CRI-O용 커널 모듈 로드
+- name: 런타임 - 커널 모듈 로드
   community.general.modprobe:
     name: "{{ item }}"
     state: present
+  loop: [overlay, br_netfilter]
+  become: true
+
+- name: 런타임 - sysctl 설정 적용
+  ansible.builtin.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/99-kubernetes-crio.conf
   loop:
-    - overlay
-    - br_netfilter
+    - { name: "net.bridge.bridge-nf-call-iptables", value: "1" }
+    - { name: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+    - { name: "net.ipv4.ip_forward", value: "1" }
   become: true
 
-# 2. sysctl 설정 (IP 포워딩, 브리지 패킷 포워딩 등)
-- name: 런타임 - CRI-O용 sysctl 설정 파일 생성
-  ansible.builtin.copy:
-    dest: /etc/sysctl.d/99-kubernetes-crio.conf
-    content: |
-      net.bridge.bridge-nf-call-iptables = 1
-      net.bridge.bridge-nf-call-ip6tables = 1
-      net.ipv4.ip_forward = 1
+- name: 런타임 - 키 저장소 디렉토리 생성
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: 런타임 - CRI-O GPG 키 다운로드 및 변환
+  ansible.builtin.shell: |
+    rm -f /etc/apt/keyrings/cri-o-apt-keyring.gpg
+    curl -fsSL {{ crio_gpg_url }} | gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
+  become: true
+  changed_when: true
+
+- name: 런타임 - CRI-O APT 저장소 리스트 추가
+  ansible.builtin.lineinfile:
+    path: /etc/apt/sources.list.d/cri-o.list
+    line: "{{ crio_debian_repo }}"
+    create: yes
     owner: root
     group: root
-    mode: "0644"
+    mode: '0644'
   become: true
 
-- name: 런타임 - sysctl 적용
-  ansible.builtin.command: sysctl --system
-  register: runtime_sysctl_result
-  changed_when: "'Reloading' in runtime_sysctl_result.stdout or 'Applying' in runtime_sysctl_result.stdout"
-  become: true
-
-# 3-1. CRI-O YUM/DNF repo 설정 (RHEL 계열)
-- name: 런타임 - CRI-O Repo 설정 (RedHat 계열)
-  ansible.builtin.template:
-    src: crio.repo.j2
-    dest: /etc/yum.repos.d/crio.repo
-    owner: root
-    group: root
-    mode: "0644"
-  when: ansible_os_family == "RedHat"
-  become: true
-
-# 3-2. CRI-O APT repo 설정 (Debian/Ubuntu 계열)
-- name: 런타임 - CRI-O Repo 설정 (Debian 계열)
-  block:
-    - name: 런타임 - 키 저장소 디렉토리 생성
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: '0755'
-
-    - name: 런타임 - CRI-O GPG 키 다운로드 및 변환
-      ansible.builtin.shell: |
-        curl -fsSL {{ crio_gpg_url }} | gpg --dearmor -o /etc/apt/keyrings/cri-o-apt-keyring.gpg
-      args:
-        creates: /etc/apt/keyrings/cri-o-apt-keyring.gpg
-
-    - name: 런타임 - CRI-O APT 저장소 리스트 추가
-      ansible.builtin.lineinfile:
-        path: /etc/apt/sources.list.d/cri-o.list
-        line: "{{ crio_debian_repo }}"
-        create: yes
-  when: ansible_os_family == "Debian"
-  become: true
-
-# 4. CRI-O 패키지 설치
 - name: 런타임 - CRI-O 패키지 설치
   ansible.builtin.apt:
     name: cri-o
@@ -88,21 +113,17 @@
     update_cache: yes
   become: true
 
-# 5. CRI-O cgroup 설정(systemd)
-- name: 런타임 - CRI-O cgroup 설정 파일 생성(systemd)
+- name: 런타임 - CRI-O cgroup 설정
   ansible.builtin.copy:
     dest: /etc/crio/crio.conf.d/99-kubernetes-cgroup.conf
     content: |
       [crio.runtime]
       cgroup_manager = "systemd"
-    owner: root
-    group: root
     mode: "0644"
   notify: "런타임 - CRI-O 재시작"
   become: true
 
-# 6. CRI-O 서비스 활성화 및 기동
-- name: 런타임 - CRI-O 서비스 활성화 및 기동
+- name: 런타임 - CRI-O 서비스 활성화
   ansible.builtin.systemd:
     name: crio
     state: started

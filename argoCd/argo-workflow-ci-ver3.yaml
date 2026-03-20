@@ -42,7 +42,7 @@ spec:
 
       # ===== Image =====
       - name: image_repo
-        value: 10.0.1.12/library
+        value: 10.0.2.12/library
       - name: image_name
         value: demo-frontend   # 논리 이름(참고용)
       - name: tag_prefix

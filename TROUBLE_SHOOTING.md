@@ -16,7 +16,7 @@
 ## 2. Kubeadm 인증서 및 엔드포인트 불일치
 * **문제점**: 클러스터 구축 후 마스터 노드 외부에서 `kubectl` 명령 실행 시 타임아웃 또는 인증서 서명 오류(x509) 발생. 클라우드 사설 IP 대역과 외부 접속 엔드포인트 간의 정합성 문제 확인.
 * **해결책**:
-    * `kubeadm-config.yaml`의 `controlPlaneEndpoint`를 Azure Load Balancer 또는 마스터 사설 IP(`10.0.1.x`)로 표준화.
+    * `kubeadm-config.yaml`의 `controlPlaneEndpoint`를 Azure Load Balancer 또는 마스터 사설 IP(`10.0.2.x`)로 표준화.
     * 인증서 생성 시 사설 IP 대역을 **SAN(Subject Alternative Names)**에 명시적으로 추가하여 노드 간 통신 및 외부 관리 통신에서의 보안 신뢰성 확보.
 
 ## 3. NFS 스토리지 동적 할당 실패 (IP 유동성 문제)

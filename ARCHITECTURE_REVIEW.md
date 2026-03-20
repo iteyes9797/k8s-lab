@@ -28,7 +28,7 @@
 ## 4. 환경 독립적 실행 능력 (Environment Independence)
 * **Zero-Touch Provisioning**: Terraform을 통해 VM 생성 시점에 SSH 공개키를 자동 주입하여, 과거 방식의 **노드별 `ssh-copy-id` 반복 작업**을 완전히 제거했습니다.
 * **Bastion Proxy Tunneling**: 외부 노출을 최소화하기 위해 전용 Bastion 호스트를 구성하고, Ansible의 **ProxyCommand**를 통해 사설망 내 노드들을 안전하게 자동 제어합니다.
-* **Dynamic Variable Injection**: 설정 파일의 정적 IP 한계를 극복하기 위해 실행 시점에 환경에 맞는 사설 IP(10.0.1.x)를 적용하도록 최적화.
+* **Dynamic Variable Injection**: 설정 파일의 정적 IP 한계를 극복하기 위해 실행 시점에 환경에 맞는 사설 IP(10.0.2.x)를 적용하도록 최적화.
 
 ## 5. 제거된 기술적 부채 (Cleanup List)
 * **중복 코드 제거**: `azure/` 구형 폴더 및 루트의 파편화된 `.tf`, `roles/` 폴더를 표준 경로로 통합 및 삭제.

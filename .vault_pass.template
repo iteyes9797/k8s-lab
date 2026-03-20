@@ -1,0 +1,4 @@
+# [Ansible Vault Password Template]
+# 1. 이 파일을 '.vault_pass'로 복사(cp)하여 사용하세요.
+# 2. 상세 설정 방법은 README.md의 'Step2' 섹션을 참고하세요.
+# 3. 실제 비밀번호는 Git에 커밋되지 않도록 주의하십시오.

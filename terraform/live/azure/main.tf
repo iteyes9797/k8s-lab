@@ -9,7 +9,8 @@ module "network" {
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
   vnet_cidr           = var.vnet_cidr
-  subnet_cidr         = var.subnet_cidr
+  public_subnet_cidr  = "10.0.2.0/24"  
+  private_subnet_cidr = "10.0.2.0/24"  
 }
 
 module "vm" {
@@ -17,11 +18,13 @@ module "vm" {
 
   resource_group_name = azurerm_resource_group.rg.name
   location            = var.location
-  subnet_id           = module.network.subnet_id
+  subnet_id           = module.network.private_subnet_id
   ssh_public_key      = var.ssh_public_key
 
   nodes = var.nodes
   node_ips = var.node_ips
+
+  assign_public_ip = false
 }
 
 module "bastion" {
@@ -30,26 +33,42 @@ module "bastion" {
   location            = var.location
   resource_group_name = azurerm_resource_group.rg.name
   
-  subnet_id      = module.network.subnet_id
+  subnet_id      = module.network.public_subnet_id
   ssh_public_key = var.ssh_public_key
 
-  # 리소스 그룹이 완전히 생성된 후에 Bastion을 시작하도록 명시적 의존성 추가
   depends_on = [azurerm_resource_group.rg]
 }
 
+# 1. Ansible용 인벤토리 파일 생성
 resource "local_file" "ansible_inventory" {
   content = templatefile("${path.module}/../../inventory.tpl", 
     {
-      master1    = lookup(module.vm.internal_ips, "k8s-master01", "")
-      master2    = lookup(module.vm.internal_ips, "k8s-master02", "")
-      master3    = lookup(module.vm.internal_ips, "k8s-master03", "")
-      worker1    = lookup(module.vm.internal_ips, "k8s-worker01", "")
-      worker2    = lookup(module.vm.internal_ips, "k8s-worker02", "")
-      nfs        = lookup(module.vm.internal_ips, "k8s-nfs01", "")
-      lb         = lookup(module.vm.internal_ips, "k8s-lb01", "")
-      
       bastion_ip = module.bastion.public_ip 
+      
+      master1    = lookup(module.vm.internal_ips, "master1", "")
+      master2    = lookup(module.vm.internal_ips, "master2", "")
+      master3    = lookup(module.vm.internal_ips, "master3", "")
+      worker1    = lookup(module.vm.internal_ips, "worker1", "")
+      worker2    = lookup(module.vm.internal_ips, "worker2", "")
+      nfs        = lookup(module.vm.internal_ips, "nfs", "")
+      lb         = lookup(module.vm.internal_ips, "lb", "")   
     }
   )
   filename = "${path.module}/../../inventory.ini"
+}
+
+# 2. 로컬 PC 접속용 SSH 설정 파일 생성
+resource "local_file" "ssh_config" {
+  content = templatefile("${path.module}/../../ssh_config.tpl", {
+    bastion_ip = module.bastion.public_ip
+    
+    master1    = lookup(module.vm.internal_ips, "master1", "")
+    master2    = lookup(module.vm.internal_ips, "master2", "")
+    master3    = lookup(module.vm.internal_ips, "master3", "")
+    worker1    = lookup(module.vm.internal_ips, "worker1", "")
+    worker2    = lookup(module.vm.internal_ips, "worker2", "")
+    nfs        = lookup(module.vm.internal_ips, "nfs", "")
+    lb         = lookup(module.vm.internal_ips, "lb", "")
+  })
+  filename = "${path.module}/../../ssh_config"
 }

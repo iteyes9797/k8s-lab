@@ -1,133 +1,44 @@
 ---
-# ==========================================================
-# 0) 기존 흔적 완벽 제거 (재실행 시 조인 실패 방지 핵심)
-# ==========================================================
-- name: Worker - 기존 클러스터 설정 강제 초기화
-  ansible.builtin.shell: |
-    kubeadm reset -f
-    systemctl stop kubelet
-    rm -rf /etc/kubernetes/
-    rm -rf /var/lib/kubelet/*
-    rm -rf /var/lib/etcd
-  become: true
-  # 팁: 매번 밀기 싫다면 'when: not worker_kubelet_conf.stat.exists' 조건을 쓰세요.
-  # 하지만 초기 구축 단계에선 무조건 리셋하는 게 정신 건강에 이롭습니다.
-
-# ==========================================================
-# 1) Kubernetes Repo 설정 (OS 계열 자동 감지)
-# ==========================================================
-
-# [Debian/Ubuntu 계열 설정]
-- name: Worker - (Ubuntu) Kubernetes APT 설정
-  block:
-    - name: Worker - APT 키링 디렉토리 생성
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: '0755'
-
-    - name: Worker - Kubernetes APT 키 다운로드
-      ansible.builtin.get_url:
-        url: "https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key"
-        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
-        mode: '0644'
-
-    - name: Worker - Kubernetes APT 레포지토리 추가
-      ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /"
-        state: present
-        filename: kubernetes
-  when: ansible_os_family == "Debian"
-  become: true
-
-# [RedHat/CentOS 계열 설정]
-- name: Worker - (RedHat) Kubernetes YUM 레포지토리 설정
-  ansible.builtin.yum_repository:
-    name: "kubernetes"
-    description: "Kubernetes Repo"
-    baseurl: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/"
-    enabled: true
-    gpgcheck: true
-    gpgkey: "https://pkgs.k8s.io/core:/stable:/v1.32/rpm/repodata/repomd.xml.key"
-  when: ansible_os_family == "RedHat"
-  become: true
-
-# ==========================================================
-# 2) kubeadm / kubelet / kubectl 설치 및 버전 고정
-# ==========================================================
-
-# [Ubuntu 설치 및 버전 고정]
-- name: Worker - (Ubuntu) 컴포넌트 설치 및 버전 고정
-  block:
-    - name: Worker - 패키지 설치
-      ansible.builtin.apt:
-        name: [kubeadm, kubelet, kubectl]
-        state: present
-        update_cache: yes
-
-    - name: Worker - 패키지 버전 고정 (업데이트 방지)
-      ansible.builtin.dpkg_selections:
-        name: "{{ item }}"
-        selection: hold
-      loop: [kubeadm, kubelet, kubectl]
-  when: ansible_os_family == "Debian"
-  become: true
-
-# [RedHat 설치]
-- name: Worker - (RedHat) 컴포넌트 설치
-  ansible.builtin.yum:
-    name: [kubeadm, kubelet, kubectl]
-    state: present
-  when: ansible_os_family == "RedHat"
-  become: true
-
-# ==========================================================
-# 3) 공통 설정 및 클러스터 Join
-# ==========================================================
-
-- name: Worker - kubelet 서비스 활성화 (Join 전 중지 상태 유지)
-  ansible.builtin.systemd:
-    name: kubelet
-    enabled: true
-    state: stopped # join 명령어가 자동으로 깨웁니다. 미리 켜지면 config 파일 없어서 울어요.
-  become: true
-
+# 1. Join 여부 확인
 - name: Worker - 기존 클러스터 Join 여부 확인
   ansible.builtin.stat:
     path: /etc/kubernetes/kubelet.conf
   register: worker_kubelet_conf
   become: true
 
-- name: Worker - master01에서 join 명령 생성 (Delegate)
-  ansible.builtin.shell: >
-    kubeadm token create --print-join-command 
-    --kubeconfig /etc/kubernetes/admin.conf
-  register: worker_join_cmd_result
-  changed_when: false
-  delegate_to: "{{ groups['masters'][0] }}"
+# 2. Join이 안 된 경우에만 패키지 설치 및 초기화 실행
+- name: Worker - 패키지 설치 및 초기화 (Join 안 된 경우만)
+  block:
+    - name: Worker - 기존 흔적 제거
+      ansible.builtin.shell: |
+        kubeadm reset -f
+        systemctl stop kubelet
+        rm -rf /etc/kubernetes/
+      become: true
+
+    - name: Worker - 패키지 설치 (Ubuntu)
+      ansible.builtin.apt:
+        name: [kubeadm, kubelet, kubectl]
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+      become: true
   when: not worker_kubelet_conf.stat.exists
-  become: true
 
-- name: Worker - join 명령 Fact로 저장 및 주소 보정
-  ansible.builtin.set_fact:
-    # 만약 join 명령어에 LB 주소가 들어있다면 마스터 실제 IP로 치환
-    worker_join_cmd: "{{ worker_join_cmd_result.stdout | replace(k8s_api_vip, '10.0.1.10') }}"
-  when: 
-    - not worker_kubelet_conf.stat.exists
-    - worker_join_cmd_result.stdout is defined
-
-- name: Worker - 클러스터에 join 실행 (인증 무시 옵션 추가)
+# 3. [핵심] 마스터에서 공유한 Join 명령어 가져오기
+- name: Worker - 클러스터에 join 실행
   ansible.builtin.shell: >
-    {{ worker_join_cmd }}
+    {{ hostvars[groups['masters'][0]]['kubernetes_join_command'] }}
     --cri-socket unix:///var/run/crio/crio.sock
-    --discovery-token-unsafe-skip-ca-verification
+    --ignore-preflight-errors=all
   when:
     - not worker_kubelet_conf.stat.exists
-    - worker_join_cmd is defined
+    - hostvars[groups['masters'][0]]['kubernetes_join_command'] is defined
   become: true
 
-- name: Worker - kubelet 서비스 최종 시작 확인
+- name: Worker - kubelet 서비스 시작 및 활성화
   ansible.builtin.systemd:
     name: kubelet
     state: started
+    enabled: true
   become: true

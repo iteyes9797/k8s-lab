@@ -1,0 +1,26 @@
+Host bastion
+    HostName 20.196.198.189
+    User azureuser
+    IdentityFile ~/.ssh/id_rsa
+    StrictHostKeyChecking no
+
+Host k8s-*
+    User azureuser
+    IdentityFile ~/.ssh/id_rsa
+    ProxyJump bastion
+    StrictHostKeyChecking no
+
+Host k8s-master01
+    HostName 10.0.2.10
+Host k8s-master02
+    HostName 10.0.2.11
+Host k8s-master03
+    HostName 10.0.2.12
+Host k8s-worker01
+    HostName 10.0.2.21
+Host k8s-worker02
+    HostName 10.0.2.22
+Host k8s-nfs01
+    HostName 10.0.2.30
+Host k8s-lb01
+    HostName 10.0.2.110

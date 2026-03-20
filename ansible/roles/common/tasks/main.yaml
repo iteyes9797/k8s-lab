@@ -1,67 +1,106 @@
 ---
-- name: 공통 - 현재 호스트 표시
+- name: "공통 - 현재 호스트 정보 표시"
   ansible.builtin.debug:
-    msg: "Running 'common' role on {{ inventory_hostname }}"
+    msg: "설정 중인 노드: {{ inventory_hostname }} (IP: {{ ansible_host }})"
 
-# 1. swap 비활성화 (런타임)
-- name: 공통 - swap 비활성화
+# 1. 호스트네임 동기화
+- name: "공통 - 시스템 호스트네임 설정"
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  become: true
+
+# 2. /etc/hosts 자동 등록
+- name: "공통 - 모든 노드 정보를 /etc/hosts에 등록"
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: ".*{{ item }}$"
+    line: "{{ hostvars[item].ansible_host }} {{ item }}"
+    state: present
+  loop: "{{ groups['all'] }}"
+  become: true
+
+# 3. Swap 비활성화
+- name: "공통 - Swap 메모리 즉시 비활성화"
   ansible.builtin.command: swapoff -a
   when: ansible_swaptotal_mb | default(0) | int > 0
   changed_when: true
   become: true
 
-# 2. /etc/fstab 내 swap 항목 주석 처리
-- name: 공통 - /etc/fstab 내 swap 항목 주석 처리
+- name: "공통 - /etc/fstab 내 Swap 항목 영구 주석 처리"
   ansible.builtin.replace:
     path: /etc/fstab
-    regexp: '^(.*\s+swap\s+.*)$'
+    regexp: '^([^#].*?\sswap\s+.*)$'
     replace: '# \1'
   become: true
 
-# 3. firewalld 중지 및 비활성화 (있을 때만)
-- name: 공통 - firewalld 설치 여부 확인
-  ansible.builtin.stat:
-    path: /usr/sbin/firewalld
-  register: common_firewalld_bin
+# 4. 커널 모듈 로드 및 네트워크 최적화
+- name: "공통 - 필수 커널 모듈 로드"
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  become: true
 
-- name: 공통 - firewalld 중지
+- name: "공통 - 재부팅 시에도 커널 모듈 자동 로드 설정"
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+  become: true
+
+# 5. 네트워크 커널 파라미터 최적화
+- name: "공통 - 네트워크 브리지 및 포워딩 설정 적용"
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+  become: true
+
+# 6. 보안 서비스 정리
+- name: "공통 - UFW 중지 (Ubuntu일 때만)"
+  ansible.builtin.systemd:
+    name: ufw
+    state: stopped
+    enabled: false
+  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+  become: true
+
+- name: "공통 - Firewalld 중지 (RedHat 계열일 때만)"
   ansible.builtin.systemd:
     name: firewalld
     state: stopped
     enabled: false
-  when: common_firewalld_bin.stat.exists
+  when: ansible_os_family == "RedHat"
+  ignore_errors: yes
   become: true
 
-# 4. SELinux 상태 확인 (RHEL 계열만, 실패 무시)
-- name: 공통 - SELinux 상태 확인
-  ansible.builtin.command: getenforce
-  register: common_selinux_state
-  failed_when: false
-  changed_when: false
-  become: true
+# 7. 시스템 시간 동기화
+- name: "공통 - Chrony 설치 및 활성화"
+  ansible.builtin.apt:
+    name: chrony
+    state: present
+  when: ansible_os_family == "Debian"
 
-- name: 공통 - SELinux 현재 상태 출력
-  ansible.builtin.debug:
-    msg: "SELinux 현재 상태: {{ common_selinux_state.stdout | default('unknown') }}"
+- name: "공통 - Chrony 서비스 기동"
+  ansible.builtin.systemd:
+    name: chrony
+    state: started
+    enabled: true
 
-# 4-1. SELinux가 Enforcing 이면 Permissive로 전환
-- name: 공통 - SELinux를 Permissive로 변경 (런타임)
-  ansible.builtin.command: setenforce 0
-  when: common_selinux_state.stdout == "Enforcing"
-  changed_when: common_selinux_state.stdout == "Enforcing"
-  become: true
-
-- name: 공통 - /etc/selinux/config 파일에서 SELINUX=permissive 로 변경
-  ansible.builtin.replace:
-    path: /etc/selinux/config
-    regexp: '^SELINUX=enforcing'
-    replace: 'SELINUX=permissive'
-  when: common_selinux_state.stdout == "Enforcing"
-  become: true
-
-# 5. 기본 유틸 및 패키지 설치 (필요시 추가)
-- name: 공통 - 기본 패키지 설치
-  ansible.builtin.package:
+# 8. 필수 유틸리티 및 종속성 패키지 설치
+- name: "공통 - 필수 패키지 일괄 설치"
+  ansible.builtin.apt:
     name:
       - vim
       - curl
@@ -71,5 +110,10 @@
       - iproute2
       - lsof
       - nfs-common
+      - socat
+      - conntrack
+      - apt-transport-https
+      - ca-certificates
     state: present
+    update_cache: yes
   become: true
