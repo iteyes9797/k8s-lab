@@ -5,15 +5,22 @@
     mode: "0644"
   when: inventory_hostname == groups['masters'][0]
 
-- name: CNI - Calico Pod CIDR 및 MTU 자동 치환
+- name: CNI - Calico Pod CIDR 및 VXLAN 최적화 치환
   ansible.builtin.shell: |
-    # 1. Pod CIDR 치환
+    # 1. Pod CIDR 치환 (기본값 192.168.0.0/16을 사용자 정의 CIDR로 변경)
     sed -i 's@192.168.0.0/16@{{ pod_network_cidr }}@g' /tmp/calico.yaml
     
-    # 2. Azure 환경을 위한 MTU 1400 설정 강제 삽입
-    # CALICO_IPV4POOL_IPIP 설정 바로 아래에 FELIX_IPINIPMTU 설정을 추가합니다.
-    if ! grep -q "FELIX_IPINIPMTU" /tmp/calico.yaml; then
-      sed -i '/name: CALICO_IPV4POOL_IPIP/a \            - name: FELIX_IPINIPMTU\n              value: "1400"' /tmp/calico.yaml
+    # 2. Azure 라우팅 이슈 해결을 위한 VXLAN 모드 활성화 및 IPIP 비활성화
+    # IP-in-IP 모드를 Never로 변경
+    sed -i 's/name: CALICO_IPV4POOL_IPIP/name: CALICO_IPV4POOL_IPIP\n              value: "Never"/g' /tmp/calico.yaml
+    # VXLAN 모드를 Always로 변경
+    sed -i 's/name: CALICO_IPV4POOL_VXLAN/name: CALICO_IPV4POOL_VXLAN\n              value: "Always"/g' /tmp/calico.yaml
+
+    # 3. Azure 환경을 위한 MTU 1400 설정 강제 삽입 (VXLAN 전용 MTU 설정)
+    # FELIX_VXLANMTU 설정이 없으면 추가합니다.
+    if ! grep -q "FELIX_VXLANMTU" /tmp/calico.yaml; then
+      # CALICO_IPV4POOL_VXLAN 설정 아래에 MTU 값을 삽입합니다.
+      sed -i '/name: CALICO_IPV4POOL_VXLAN/a \            - name: FELIX_VXLANMTU\n              value: "1400"' /tmp/calico.yaml
     fi
   when: inventory_hostname == groups['masters'][0]
   become: true

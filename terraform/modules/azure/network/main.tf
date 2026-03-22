@@ -76,7 +76,7 @@ resource "azurerm_network_security_group" "private_nsg" {
     protocol                   = "*"
     source_port_range          = "*"
     destination_port_range     = "*"
-    source_address_prefix      = "10.0.2.0/24"
+    source_address_prefix      = "10.244.0.0/16" # "10.0.2.0/24"
     destination_address_prefix = "*"
   }
 }

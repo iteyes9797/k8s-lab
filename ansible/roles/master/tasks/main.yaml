@@ -6,7 +6,7 @@
   register: kube_admin_conf
   become: true
 
-- name: 마스터 - 실패한 이전 시도의 흔적 삭제
+- name: 마스터 - 실패한 이전 시도의 흔적 삭제 (미설치 노드 대상)
   ansible.builtin.command: kubeadm reset -f
   when: not kube_admin_conf.stat.exists
   ignore_errors: true
@@ -19,8 +19,8 @@
   loop:
     - /etc/cni/net.d
     - /var/lib/etcd
-    - /etc/kubernetes/pki       
-    - /etc/kubernetes/manifests 
+    - /etc/kubernetes/pki
+    - /etc/kubernetes/manifests
   when: not kube_admin_conf.stat.exists
   become: true
 
@@ -30,7 +30,6 @@
     src: kubeadm-config.yaml.j2
     dest: /tmp/kubeadm-config.yaml
   when: not kube_admin_conf.stat.exists
-  # 설정 파일이 바뀌면 나중에 kubelet을 재시작해야 할 수도 있으므로 의존성 부여 
   notify: restart kubelet
 
 # 3. 클러스터 초기화
@@ -40,9 +39,10 @@
     --config /tmp/kubeadm-config.yaml 
     --upload-certs
   register: init_output
-  when: not kube_admin_conf.stat.exists
+  when: 
+    - not kube_admin_conf.stat.exists
+    - inventory_hostname == groups['masters'][0]
   become: true
-  # 초기화 직후 컨포넌트 정규화를 위해 재시작 알림
   notify: 
     - restart crio
     - restart kubelet
@@ -56,11 +56,6 @@
     group: "{{ ansible_user }}"
     mode: '0755'
 
-- name: 마스터 - admin.conf 존재 확인
-  ansible.builtin.stat:
-    path: /etc/kubernetes/admin.conf
-  register: final_admin_conf
-
 - name: 마스터 - 사용자 환경에 kubeconfig 배포
   ansible.builtin.copy:
     src: /etc/kubernetes/admin.conf
@@ -69,31 +64,29 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: '0600'
-  when: final_admin_conf.stat.exists
-
-# 5. 조인 토큰 및 인증서 키 추출
-- name: 마스터 - 워커 및 추가 마스터용 조인 명령어 생성
-  ansible.builtin.shell: |
-    # admin.conf를 직접 참조하여 인증서 신뢰 문제 해결
-    kubeadm --kubeconfig=/etc/kubernetes/admin.conf token create --print-join-command
-  register: join_command_raw
-  when: inventory_hostname == groups['masters'][0]  
-  run_once: true                                   
+  when: kube_admin_conf.stat.exists or (init_output is defined and not init_output.failed)
   become: true
 
-- name: 마스터 - 추가 마스터 합류를 위한 인증서 키 추출
-  ansible.builtin.shell: |
-    kubeadm --kubeconfig=/etc/kubernetes/admin.conf init phase upload-certs --upload-certs | tail -n 1
-  register: cert_key_raw
+# 5. 조인 토큰 및 인증서 키 추출
+- name: 마스터 - 클러스터 합류 정보 추출 및 전 노드 공유
+  block:
+    - name: 마스터 - 조인 명령어 생성
+      ansible.builtin.shell: |
+        kubeadm --kubeconfig=/etc/kubernetes/admin.conf token create --print-join-command
+      register: join_command_raw
+
+    - name: 마스터 - 인증서 키 추출 (정밀 파싱)
+      ansible.builtin.shell: |
+        kubeadm --kubeconfig=/etc/kubernetes/admin.conf init phase upload-certs --upload-certs | grep -v "upload-certs" | tail -n 1
+      register: cert_key_raw
+
+    - name: 마스터 - 추출된 정보를 모든 노드에 강제 주입
+      ansible.builtin.set_fact:
+        kubernetes_join_command: "{{ join_command_raw.stdout.strip() }}"
+        kubernetes_certificate_key: "{{ cert_key_raw.stdout.strip() }}"
+      delegate_to: "{{ item }}"
+      delegate_facts: true
+      with_items: "{{ groups['all'] }}"
   when: inventory_hostname == groups['masters'][0]
   run_once: true
   become: true
-
-# 6. 추출된 정보를 모든 노드에 공유
-- name: 마스터 - 클러스터 합류 정보를 모든 노드에 변수로 설정
-  ansible.builtin.set_fact:
-    kubernetes_join_command: "{{ join_command_raw.stdout }}"
-    kubernetes_certificate_key: "{{ cert_key_raw.stdout | default('') }}"
-  delegate_to: "{{ item }}"
-  delegate_facts: true
-  with_items: "{{ groups['all'] }}"
