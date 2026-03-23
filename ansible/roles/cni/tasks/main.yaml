@@ -12,9 +12,9 @@
     
     # 2. Azure 라우팅 이슈 해결을 위한 VXLAN 모드 활성화 및 IPIP 비활성화
     # IP-in-IP 모드를 Never로 변경
-    sed -i 's/name: CALICO_IPV4POOL_IPIP/name: CALICO_IPV4POOL_IPIP\n              value: "Never"/g' /tmp/calico.yaml
+    sed -i 's/name: CALICO_IPV4POOL_IPIP/name: CALICO_IPV4POOL_IPIP\n              value: "Always"/g' /tmp/calico.yaml
     # VXLAN 모드를 Always로 변경
-    sed -i 's/name: CALICO_IPV4POOL_VXLAN/name: CALICO_IPV4POOL_VXLAN\n              value: "Always"/g' /tmp/calico.yaml
+    sed -i 's/name: CALICO_IPV4POOL_VXLAN/name: CALICO_IPV4POOL_VXLAN\n              value: "Never"/g' /tmp/calico.yaml
 
     # 3. Azure 환경을 위한 MTU 1400 설정 강제 삽입 (VXLAN 전용 MTU 설정)
     # FELIX_VXLANMTU 설정이 없으면 추가합니다.
